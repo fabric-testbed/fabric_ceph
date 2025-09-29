@@ -1,3 +1,4 @@
+import os
 from dataclasses import dataclass
 from typing import List, Dict, Optional
 
@@ -12,6 +13,7 @@ class SyncResult:
     existed_on_source: bool
     created_on_source: bool
     imported_to: List[str]
+    key_ring: str
 
     def to_dict(self) -> Dict[str, object]:
         return {
@@ -19,6 +21,7 @@ class SyncResult:
             "existed_on_source": self.existed_on_source,
             "created_on_source": self.created_on_source,
             "imported_to": self.imported_to,
+            "key_ring": self.key_ring,
         }
 
 
@@ -96,4 +99,5 @@ def ensure_user_across_clusters(
         existed_on_source=existed,
         created_on_source=created,
         imported_to=imported_to,
+        key_ring=keyring,
     ).to_dict()

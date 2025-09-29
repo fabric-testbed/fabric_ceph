@@ -10,8 +10,6 @@ from fabric_ceph.common.globals import get_globals
 from fabric_ceph.openapi_server.models import Users, CephUser
 from fabric_ceph.openapi_server.models.create_or_update_user_request import CreateOrUpdateUserRequest  # noqa: E501
 from fabric_ceph.openapi_server.models.export_users_request import ExportUsersRequest  # noqa: E501
-from fabric_ceph.response.ceph_exception import CephException
-from fabric_ceph.response.cluster_user_helper import ACCEPT
 from fabric_ceph.response.utils import get_token, cors_success_response, cors_error_response, authorize
 from fabric_ceph.utils.cluster_helper import ensure_user_across_clusters
 
@@ -35,11 +33,17 @@ def create_user(body: dict):  # noqa: E501
         users = []
 
         cfg = globals.config
-        ensure_user_across_clusters(cfg=cfg, user_entity=body.get('user_entity'),
-                                    capabilities=body.get('capabilities'))
+        result = ensure_user_across_clusters(cfg=cfg, user_entity=body.get('user_entity'),
+                                             capabilities=body.get('capabilities'))
+
+
 
         response = Users()
-        response.data = [CephUser().from_dict(u) for u in users]
+        user = CephUser(user_entity=body.get('user_entity'),
+                        capabilities=body.get('capabilities'),
+                        keys=[])
+        user.keys.append(result.get('keyring'))
+        response.data = [user]
         response.size = len(response.data)
         response.type = "users"
         return cors_success_response(response_body=response)

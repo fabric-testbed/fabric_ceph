@@ -75,6 +75,7 @@ def ensure_user_across_clusters(
     # 3) Export keyring from source
     keyring = clients[source_name].export_keyring(user_entity)
     keyring_bytes = keyring.encode("utf-8")
+    print(f"KOMAL ---- {keyring}")
 
     # 4) Import everywhere else over SSH using `ceph auth import`
     imported_to: List[str] = []

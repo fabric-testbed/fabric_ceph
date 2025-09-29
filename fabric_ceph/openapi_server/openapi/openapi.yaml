@@ -1,0 +1,405 @@
+openapi: 3.0.3
+info:
+  description: |
+    Minimal OpenAPI definition for building an app around Ceph Dashboard REST endpoints used to
+    manage CephX users and authenticate via JWT. These paths mirror the documented `/api` surface.
+  title: Ceph Dashboard – Auth & Cluster User API
+  version: 1.0.0
+servers:
+- description: Local development server
+  url: http://localhost:3500
+- description: SwaggerHub API Auto Mocking
+  url: https://virtserver.swaggerhub.com/RENCI3/ceph/1.0.0
+- url: "https://{host}:{port}/api"
+  variables:
+    host:
+      default: mgr.example.org
+    port:
+      default: "8443"
+tags:
+- name: Cluster User
+paths:
+  /cluster/user:
+    get:
+      operationId: list_users
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                items:
+                  $ref: "#/components/schemas/CephUser"
+                type: array
+          description: Array of users
+        "401":
+          description: Unauthorized
+      security:
+      - bearerAuth: []
+      summary: List all CephX users
+      tags:
+      - Cluster User
+      x-accepts:
+      - application/vnd.ceph.api.v1.0+json
+      x-openapi-router-controller: fabric_ceph.openapi_server.controllers.cluster_user_controller
+    post:
+      operationId: create_user
+      requestBody:
+        content:
+          application/json:
+            examples:
+              basic:
+                value:
+                  user_entity: client.demo
+                  capabilities:
+                  - entity: mon
+                    cap: allow r
+                  - entity: osd
+                    cap: allow rwx
+                  - entity: mds
+                    cap: allow rw
+            schema:
+              $ref: "#/components/schemas/CreateOrUpdateUserRequest"
+        required: true
+      responses:
+        "201":
+          description: Created
+        "200":
+          description: OK (some deployments)
+        "400":
+          description: Bad request or entity exists with different caps
+        "401":
+          description: Unauthorized
+      security:
+      - bearerAuth: []
+      summary: Create a CephX user (with capabilities)
+      tags:
+      - Cluster User
+      x-accepts:
+      - application/vnd.ceph.api.v1.0+json
+      x-openapi-router-controller: fabric_ceph.openapi_server.controllers.cluster_user_controller
+    put:
+      operationId: update_user
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateOrUpdateUserRequest"
+        required: true
+      responses:
+        "200":
+          description: Updated
+        "201":
+          description: Created (some deployments)
+        "401":
+          description: Unauthorized
+      security:
+      - bearerAuth: []
+      summary: Update/overwrite capabilities for a CephX user
+      tags:
+      - Cluster User
+      x-accepts:
+      - application/vnd.ceph.api.v1.0+json
+      x-openapi-router-controller: fabric_ceph.openapi_server.controllers.cluster_user_controller
+  /cluster/user/export:
+    post:
+      operationId: export_users
+      requestBody:
+        content:
+          application/json:
+            examples:
+              single:
+                value:
+                  entities:
+                  - client.demo
+              multiple:
+                value:
+                  entities:
+                  - client.alice
+                  - client.bob
+            schema:
+              $ref: "#/components/schemas/ExportUsersRequest"
+        required: true
+      responses:
+        "200":
+          content:
+            text/plain:
+              schema:
+                type: string
+            application/json:
+              schema:
+                $ref: "#/components/schemas/exportUsers_200_response"
+          description: Keyring text payload
+        "401":
+          description: Unauthorized
+      security:
+      - bearerAuth: []
+      summary: Export keyring(s) for one or more CephX users
+      tags:
+      - Cluster User
+      x-accepts:
+      - application/vnd.ceph.api.v1.0+json
+      x-openapi-router-controller: fabric_ceph.openapi_server.controllers.cluster_user_controller
+  /cluster/user/{entity}:
+    delete:
+      operationId: delete_user
+      parameters:
+      - description: "CephX entity, e.g., `client.demo`"
+        explode: false
+        in: path
+        name: entity
+        required: true
+        schema:
+          type: string
+        style: simple
+      responses:
+        "200":
+          description: Deleted
+        "404":
+          description: Not found
+        "401":
+          description: Unauthorized
+      security:
+      - bearerAuth: []
+      summary: Delete a CephX user
+      tags:
+      - Cluster User
+      x-accepts:
+      - application/vnd.ceph.api.v1.0+json
+      x-openapi-router-controller: fabric_ceph.openapi_server.controllers.cluster_user_controller
+  /version:
+    get:
+      description: Version
+      operationId: version_get
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/version"
+          description: OK
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/status_500_internal_server_error"
+          description: Internal Server Error
+      summary: Version
+      tags:
+      - version
+      x-openapi-router-controller: fabric_ceph.openapi_server.controllers.version_controller
+components:
+  schemas:
+    version:
+      allOf:
+      - $ref: "#/components/schemas/status_200_ok_single"
+      - properties:
+          data:
+            items:
+              $ref: "#/components/schemas/version_data"
+            type: array
+        type: object
+      example:
+        size: 0
+        data:
+        - reference: https://github.com/fabric-testbed/ControlFramework
+          version: 1.0.0
+        - reference: https://github.com/fabric-testbed/ControlFramework
+          version: 1.0.0
+        type: type
+        status: 6
+      title: version
+      type: object
+    version_data:
+      example:
+        reference: https://github.com/fabric-testbed/ControlFramework
+        version: 1.0.0
+      properties:
+        reference:
+          example: https://github.com/fabric-testbed/ControlFramework
+          title: reference
+          type: string
+        version:
+          example: 1.0.0
+          title: version
+          type: string
+      required:
+      - reference
+      - version
+      title: version_data
+    status_200_ok_single:
+      properties:
+        size:
+          default: 1
+          title: size
+          type: integer
+        status:
+          default: 200
+          title: status
+          type: integer
+        type:
+          title: type
+          type: string
+      title: status_200_ok_single
+      type: object
+    status_500_internal_server_error:
+      example:
+        size: 1
+        type: error
+        errors:
+        - details: details
+          message: Internal Server Error
+        - details: details
+          message: Internal Server Error
+        status: 5
+      properties:
+        errors:
+          items:
+            $ref: "#/components/schemas/status_500_internal_server_error_errors"
+          title: errors
+          type: array
+        type:
+          default: error
+          title: type
+          type: string
+        size:
+          default: 1
+          title: size
+          type: integer
+        status:
+          default: 500
+          title: status
+          type: integer
+      title: status_500_internal_server_error
+      type: object
+    status_500_internal_server_error_errors:
+      example:
+        details: details
+        message: Internal Server Error
+      properties:
+        message:
+          default: Internal Server Error
+          title: message
+          type: string
+        details:
+          title: details
+          type: string
+      title: status_500_internal_server_error_errors
+      type: object
+    Capability:
+      example:
+        cap: allow rw
+        entity: mds
+      properties:
+        entity:
+          description: One of mon|osd|mds|mgr (commonly mon/osd/mds)
+          example: mds
+          title: entity
+          type: string
+        cap:
+          description: "Capability string, e.g. `allow rw`, `allow r fsname=CEPH-FS-01\
+            \ path=/volumes/_nogroup/demo`"
+          example: allow rw
+          title: cap
+          type: string
+      required:
+      - cap
+      - entity
+      title: Capability
+      type: object
+    CreateOrUpdateUserRequest:
+      example:
+        user_entity: client.demo
+        capabilities:
+        - cap: allow rw
+          entity: mds
+        - cap: allow rw
+          entity: mds
+      properties:
+        user_entity:
+          description: "CephX entity name (e.g., `client.demo`)"
+          example: client.demo
+          title: user_entity
+          type: string
+        capabilities:
+          items:
+            $ref: "#/components/schemas/Capability"
+          title: capabilities
+          type: array
+      required:
+      - capabilities
+      - user_entity
+      title: CreateOrUpdateUserRequest
+      type: object
+    CephUser:
+      example:
+        user_entity: client.demo
+        metadata:
+          key: ""
+        capabilities:
+        - cap: allow rw
+          entity: mds
+        - cap: allow rw
+          entity: mds
+        keys:
+        - "{}"
+        - "{}"
+      properties:
+        user_entity:
+          example: client.demo
+          title: user_entity
+          type: string
+        capabilities:
+          items:
+            $ref: "#/components/schemas/Capability"
+          title: capabilities
+          type: array
+        keys:
+          items:
+            type: object
+          nullable: true
+          title: keys
+          type: array
+        metadata:
+          additionalProperties: true
+          nullable: true
+          title: metadata
+          type: object
+      title: CephUser
+      type: object
+    ExportUsersRequest:
+      example:
+        entities:
+        - client.demo
+        - client.alice
+      properties:
+        entities:
+          description: List of CephX entities to export
+          example:
+          - client.demo
+          - client.alice
+          items:
+            type: string
+          title: entities
+          type: array
+      required:
+      - entities
+      title: ExportUsersRequest
+      type: object
+    exportUsers_200_response_oneOf:
+      properties:
+        keyring:
+          title: keyring
+          type: string
+      title: exportUsers_200_response_oneOf
+      type: object
+    exportUsers_200_response:
+      oneOf:
+      - $ref: "#/components/schemas/exportUsers_200_response_oneOf"
+      - type: string
+      title: exportUsers_200_response
+  securitySchemes:
+    bearerAuth:
+      bearerFormat: JWT
+      scheme: bearer
+      type: http
+      x-bearerInfoFunc: fabric_ceph.openapi_server.controllers.security_controller.info_from_bearerAuth

@@ -1,13 +1,7 @@
 import connexion
-from typing import Dict
-from typing import Tuple
-from typing import Union
 
-from fabric_ceph.openapi_server.models.ceph_user import CephUser  # noqa: E501
-from fabric_ceph.openapi_server.models.create_or_update_user_request import CreateOrUpdateUserRequest  # noqa: E501
-from fabric_ceph.openapi_server.models.export_users200_response import ExportUsers200Response  # noqa: E501
-from fabric_ceph.openapi_server.models.export_users_request import ExportUsersRequest  # noqa: E501
-from fabric_ceph.openapi_server import util
+import fabric_ceph.response.cluster_user_controller as rc
+from fabric_ceph.openapi_server.models import CreateOrUpdateUserRequest
 
 
 def create_user(body):  # noqa: E501
@@ -15,15 +9,12 @@ def create_user(body):  # noqa: E501
 
      # noqa: E501
 
-    :param create_or_update_user_request: 
+    :param create_or_update_user_request:
     :type create_or_update_user_request: dict | bytes
 
-    :rtype: Union[None, Tuple[None, int], Tuple[None, int, Dict[str, str]]
+    :rtype: Union[Status200OkNoContent, Tuple[Status200OkNoContent, int], Tuple[Status200OkNoContent, int, Dict[str, str]]
     """
-    create_or_update_user_request = body
-    if connexion.request.is_json:
-        create_or_update_user_request = CreateOrUpdateUserRequest.from_dict(connexion.request.get_json())  # noqa: E501
-    return 'do some magic!'
+    return rc.create_user(body=body)
 
 
 def delete_user(entity):  # noqa: E501
@@ -34,9 +25,9 @@ def delete_user(entity):  # noqa: E501
     :param entity: CephX entity, e.g., &#x60;client.demo&#x60;
     :type entity: str
 
-    :rtype: Union[None, Tuple[None, int], Tuple[None, int, Dict[str, str]]
+    :rtype: Union[Status200OkNoContent, Tuple[Status200OkNoContent, int], Tuple[Status200OkNoContent, int, Dict[str, str]]
     """
-    return 'do some magic!'
+    return rc.delete_user(entity=entity)
 
 
 def export_users(body):  # noqa: E501
@@ -44,15 +35,12 @@ def export_users(body):  # noqa: E501
 
      # noqa: E501
 
-    :param export_users_request: 
+    :param export_users_request:
     :type export_users_request: dict | bytes
 
     :rtype: Union[str, Tuple[str, int], Tuple[str, int, Dict[str, str]]
     """
-    export_users_request = body
-    if connexion.request.is_json:
-        export_users_request = ExportUsersRequest.from_dict(connexion.request.get_json())  # noqa: E501
-    return 'do some magic!'
+    return rc.export_users(body=body)
 
 
 def list_users():  # noqa: E501
@@ -61,9 +49,9 @@ def list_users():  # noqa: E501
      # noqa: E501
 
 
-    :rtype: Union[List[CephUser], Tuple[List[CephUser], int], Tuple[List[CephUser], int, Dict[str, str]]
+    :rtype: Union[Users, Tuple[Users, int], Tuple[Users, int, Dict[str, str]]
     """
-    return 'do some magic!'
+    return rc.list_users()
 
 
 def update_user(body):  # noqa: E501
@@ -71,12 +59,9 @@ def update_user(body):  # noqa: E501
 
      # noqa: E501
 
-    :param create_or_update_user_request: 
+    :param create_or_update_user_request:
     :type create_or_update_user_request: dict | bytes
 
-    :rtype: Union[None, Tuple[None, int], Tuple[None, int, Dict[str, str]]
+    :rtype: Union[Status200OkNoContent, Tuple[Status200OkNoContent, int], Tuple[Status200OkNoContent, int, Dict[str, str]]
     """
-    create_or_update_user_request = body
-    if connexion.request.is_json:
-        create_or_update_user_request = CreateOrUpdateUserRequest.from_dict(connexion.request.get_json())  # noqa: E501
-    return 'do some magic!'
+    return rc.update_user(body=body)

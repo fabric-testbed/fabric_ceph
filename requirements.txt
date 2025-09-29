@@ -12,3 +12,6 @@ python_dateutil >= 2.6.0
 setuptools >= 21.0.0
 Flask == 2.1.1
 waitress
+fabric_fss_utils>=1.6.0
+fabric_credmgr_client>=1.6.2
+paramiko

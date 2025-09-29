@@ -4,14 +4,18 @@ cluster:
     default_fs: CEPH-FS-01
     dashboard:
       endpoints:
-        - https://10.145.126.2:8443
+        - https://10.145.126.2:8443  # Use the same IP for SSH
       user: admin
       password: abcd1234
+      ssh_user: rocky
+      ssh_key: ~/.ssh/id_rsa_ceph
     rgw_admin:
       endpoints:
         - http://10.145.124.2:8080
       admin_access_key: admin_ak
       admin_secret_key: admin_sk
+      ssh_user: rocky
+      ssh_key: ~/.ssh/id_rsa_ceph
 
 runtime:
   service_project:
@@ -20,7 +24,7 @@ runtime:
 logging:
   ## The directory in which actor should create log files.
   ## This directory will be automatically created if it does not exist.
-  log-directory: .
+  log-directory: logs
 
   ## The filename to be used for actor's log file.
   log-file: ceph.log

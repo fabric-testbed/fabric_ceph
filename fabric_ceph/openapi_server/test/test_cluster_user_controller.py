@@ -2,10 +2,16 @@ import unittest
 
 from flask import json
 
-from fabric_ceph.openapi_server.models.ceph_user import CephUser  # noqa: E501
 from fabric_ceph.openapi_server.models.create_or_update_user_request import CreateOrUpdateUserRequest  # noqa: E501
 from fabric_ceph.openapi_server.models.export_users200_response import ExportUsers200Response  # noqa: E501
 from fabric_ceph.openapi_server.models.export_users_request import ExportUsersRequest  # noqa: E501
+from fabric_ceph.openapi_server.models.status200_ok_no_content import Status200OkNoContent  # noqa: E501
+from fabric_ceph.openapi_server.models.status400_bad_request import Status400BadRequest  # noqa: E501
+from fabric_ceph.openapi_server.models.status401_unauthorized import Status401Unauthorized  # noqa: E501
+from fabric_ceph.openapi_server.models.status403_forbidden import Status403Forbidden  # noqa: E501
+from fabric_ceph.openapi_server.models.status404_not_found import Status404NotFound  # noqa: E501
+from fabric_ceph.openapi_server.models.status500_internal_server_error import Status500InternalServerError  # noqa: E501
+from fabric_ceph.openapi_server.models.users import Users  # noqa: E501
 from fabric_ceph.openapi_server.test import BaseTestCase
 
 
@@ -19,6 +25,7 @@ class TestClusterUserController(BaseTestCase):
         """
         create_or_update_user_request = {"user_entity":"client.demo","capabilities":[{"cap":"allow rw","entity":"mds"},{"cap":"allow rw","entity":"mds"}]}
         headers = { 
+            'Accept': 'application/json',
             'Content-Type': 'application/json',
             'Authorization': 'Bearer special-key',
         }
@@ -37,6 +44,7 @@ class TestClusterUserController(BaseTestCase):
         Delete a CephX user
         """
         headers = { 
+            'Accept': 'application/json',
             'Authorization': 'Bearer special-key',
         }
         response = self.client.open(
@@ -89,6 +97,7 @@ class TestClusterUserController(BaseTestCase):
         """
         create_or_update_user_request = {"user_entity":"client.demo","capabilities":[{"cap":"allow rw","entity":"mds"},{"cap":"allow rw","entity":"mds"}]}
         headers = { 
+            'Accept': 'application/json',
             'Content-Type': 'application/json',
             'Authorization': 'Bearer special-key',
         }

@@ -23,6 +23,9 @@ dependencies = [
     "swagger-ui-bundle>= 0.0.2",
     "PyYAML",
     "fabric_fss_utils==1.6.0",
+    "fabric_fss_utils>=1.6.0",
+    "fabric_credmgr_client>=1.6.2",
+    "paramiko"
     ]
 
 [project.optional-dependencies]

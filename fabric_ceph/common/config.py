@@ -31,18 +31,19 @@ Usage:
 """
 from __future__ import annotations
 
-from dataclasses import dataclass, field
-from datetime import timedelta
+from dataclasses import dataclass
+from datetime import datetime
+from functools import lru_cache
 from pathlib import Path
 from typing import Dict, List, Optional, Any
-import logging
-import logging.handlers
 import os
-import re
 
 import yaml
 import requests
 
+from fabric_ceph.utils.log_helper import LogHelper
+
+DEFAULT_CONFIG_PATH = os.getenv("APP_CONFIG_PATH", "config.yml")
 
 # ---------- helpers ----------
 def _ensure_nonempty_list(xs: Optional[List[str]], name: str) -> List[str]:
@@ -54,19 +55,11 @@ def _ensure_nonempty_list(xs: Optional[List[str]], name: str) -> List[str]:
     return xs2
 
 
-_HMS_RE = re.compile(r"^\s*(\d{1,2}):([0-5]\d):([0-5]\d)\s*$")
-
-
-def parse_hms_to_timedelta(hms: str) -> timedelta:
+def parse_hms_to_datetime(hms: str) -> datetime:
     """
-    Parse 'HH:MM:SS' to timedelta.
+    Parse 'HH:MM:SS' to datetime.
     """
-    m = _HMS_RE.match(str(hms))
-    if not m:
-        raise ValueError(f"Invalid HH:MM:SS duration: {hms!r}")
-    h, m_, s = map(int, m.groups())
-    # less than 24 hours per your comment; we don't enforce upper bound here
-    return timedelta(hours=h, minutes=m_, seconds=s)
+    return datetime.strptime(hms, "%H:%M:%S")
 
 
 def _bool(x: Any) -> bool:
@@ -83,15 +76,17 @@ class DashboardConfig:
     endpoints: List[str]
     user: str
     password: str
-
-    # Optional: env overrides (e.g., DASHBOARD_PASSWORD_EUROPE)
     env_prefix: Optional[str] = None
+    # NEW (optional)
+    ssh_user: Optional[str] = None
+    ssh_key: Optional[str] = None
+    # optional: ssh_port too (int|None) if you like
+    ssh_port: Optional[int] = None
 
     def __post_init__(self):
         self.endpoints = _ensure_nonempty_list(self.endpoints, "cluster.<name>.dashboard.endpoints")
         if not self.user:
             raise ValueError("cluster.<name>.dashboard.user is required")
-        # Secrets may be overridden by env
         if self.env_prefix:
             self.password = os.getenv(f"{self.env_prefix}_DASHBOARD_PASSWORD", self.password)
 
@@ -133,6 +128,10 @@ class RGWAdminConfig:
     admin_access_key: str
     admin_secret_key: str
     env_prefix: Optional[str] = None
+    # NEW (optional)
+    ssh_user: Optional[str] = None
+    ssh_key: Optional[str] = None
+    ssh_port: Optional[int] = None
 
     def __post_init__(self):
         self.endpoints = _ensure_nonempty_list(self.endpoints, "cluster.<name>.rgw_admin.endpoints")
@@ -173,40 +172,21 @@ class LoggingConfig:
         """
         Set up rotating file handlers based on this config.
         """
-        self.log_directory.mkdir(parents=True, exist_ok=True)
-
-        main_path = self.log_directory / self.log_file
-        metrics_path = self.log_directory / self.metrics_log_file
-
-        level = getattr(logging, str(self.log_level).upper(), logging.INFO)
-        logging.basicConfig(level=level)  # root level
-
-        fmt = logging.Formatter("%(asctime)s %(levelname)s %(name)s: %(message)s")
-
-        # Main log
-        h1 = logging.handlers.RotatingFileHandler(
-            main_path, maxBytes=int(self.log_size), backupCount=int(self.log_retain)
-        )
-        h1.setFormatter(fmt)
-        logging.getLogger(self.logger).addHandler(h1)
-
-        # Metrics log (separate logger)
-        h2 = logging.handlers.RotatingFileHandler(
-            metrics_path, maxBytes=int(self.log_size), backupCount=int(self.log_retain)
-        )
-        h2.setFormatter(fmt)
-        logging.getLogger(f"{self.logger}.metrics").addHandler(h2)
+        return LogHelper.make_logger(log_dir=self.log_directory, log_file=self.log_file, log_level=self.log_level,
+                                     log_retain=self.log_retain, log_size=self.log_size, logger=self.logger)
 
 
 @dataclass
 class OAuthConfig:
     jwks_url: str
-    key_refresh: timedelta
+    key_refresh: datetime
     verify_exp: bool = True
 
     @classmethod
     def from_raw(cls, jwks_url: str, key_refresh: str, verify_exp: Any = True) -> "OAuthConfig":
-        return cls(jwks_url=jwks_url, key_refresh=parse_hms_to_timedelta(key_refresh), verify_exp=_bool(verify_exp))
+        return cls(jwks_url=jwks_url, key_refresh=parse_hms_to_datetime(key_refresh), verify_exp=_bool(verify_exp))
+
+
 
 
 @dataclass
@@ -265,12 +245,18 @@ class Config:
                 endpoints=dash_raw.get("endpoints") or [],
                 user=dash_raw.get("user") or "",
                 password=dash_raw.get("password") or "",
+                ssh_key=rgw_raw.get("ssh_key") or "",
+                ssh_user=rgw_raw.get("ssh_user") or "",
+                ssh_port=rgw_raw.get("ssh_port") or "",
                 env_prefix=env_prefix,
             )
             rgw = RGWAdminConfig(
                 endpoints=rgw_raw.get("endpoints") or [],
                 admin_access_key=rgw_raw.get("admin_access_key") or "",
                 admin_secret_key=rgw_raw.get("admin_secret_key") or "",
+                ssh_key=rgw_raw.get("ssh_key") or "",
+                ssh_user=rgw_raw.get("ssh_user") or "",
+                ssh_port=rgw_raw.get("ssh_port") or "",
                 env_prefix=env_prefix,
             )
 
@@ -290,7 +276,7 @@ class Config:
         # logging
         log_raw = data.get("logging") or {}
         logging_cfg = LoggingConfig(
-            log_directory=Path(log_raw.get("log-directory") or "/var/log/actor"),
+            log_directory=Path(log_raw.get("log-directory") or "/var/log/ceph"),
             log_file=log_raw.get("log-file") or "actor.log",
             metrics_log_file=log_raw.get("metrics-log-file") or "metrics.log",
             log_level=log_raw.get("log-level") or "INFO",
@@ -331,3 +317,14 @@ class Config:
         # pick the first defined cluster if you want a crude default
         key = next(iter(self.cluster.keys()))
         return self.cluster[key]
+
+
+@lru_cache(maxsize=1)
+def get_cfg(path: str | Path = DEFAULT_CONFIG_PATH) -> Config:
+    """Load once, reuse everywhere."""
+    return Config.load_from_file(path)
+
+def init_cfg(path: str | Path) -> Config:
+    """Call this once at startup if you want a non-default path or to reload."""
+    get_cfg.cache_clear()
+    return get_cfg(path)

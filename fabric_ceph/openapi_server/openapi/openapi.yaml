@@ -17,6 +17,7 @@ servers:
     port:
       default: "8443"
 tags:
+- name: Auth
 - name: Cluster User
 paths:
   /cluster/user:
@@ -27,19 +28,43 @@ paths:
           content:
             application/json:
               schema:
-                items:
-                  $ref: "#/components/schemas/CephUser"
-                type: array
-          description: Array of users
+                $ref: "#/components/schemas/users"
+          description: OK
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/status_400_bad_request"
+          description: Bad Request
         "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/status_401_unauthorized"
           description: Unauthorized
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/status_403_forbidden"
+          description: Forbidden
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/status_404_not_found"
+          description: Not Found
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/status_500_internal_server_error"
+          description: Internal Server Error
       security:
       - bearerAuth: []
       summary: List all CephX users
       tags:
       - Cluster User
-      x-accepts:
-      - application/vnd.ceph.api.v1.0+json
       x-openapi-router-controller: fabric_ceph.openapi_server.controllers.cluster_user_controller
     post:
       operationId: create_user
@@ -61,21 +86,47 @@ paths:
               $ref: "#/components/schemas/CreateOrUpdateUserRequest"
         required: true
       responses:
-        "201":
-          description: Created
         "200":
-          description: OK (some deployments)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/status_200_ok_no_content"
+          description: OK
         "400":
-          description: Bad request or entity exists with different caps
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/status_400_bad_request"
+          description: Bad Request
         "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/status_401_unauthorized"
           description: Unauthorized
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/status_403_forbidden"
+          description: Forbidden
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/status_404_not_found"
+          description: Not Found
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/status_500_internal_server_error"
+          description: Internal Server Error
       security:
       - bearerAuth: []
       summary: Create a CephX user (with capabilities)
       tags:
       - Cluster User
-      x-accepts:
-      - application/vnd.ceph.api.v1.0+json
       x-openapi-router-controller: fabric_ceph.openapi_server.controllers.cluster_user_controller
     put:
       operationId: update_user
@@ -87,18 +138,46 @@ paths:
         required: true
       responses:
         "200":
-          description: Updated
-        "201":
-          description: Created (some deployments)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/status_200_ok_no_content"
+          description: OK
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/status_400_bad_request"
+          description: Bad Request
         "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/status_401_unauthorized"
           description: Unauthorized
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/status_403_forbidden"
+          description: Forbidden
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/status_404_not_found"
+          description: Not Found
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/status_500_internal_server_error"
+          description: Internal Server Error
       security:
       - bearerAuth: []
       summary: Update/overwrite capabilities for a CephX user
       tags:
       - Cluster User
-      x-accepts:
-      - application/vnd.ceph.api.v1.0+json
       x-openapi-router-controller: fabric_ceph.openapi_server.controllers.cluster_user_controller
   /cluster/user/export:
     post:
@@ -129,8 +208,36 @@ paths:
               schema:
                 $ref: "#/components/schemas/exportUsers_200_response"
           description: Keyring text payload
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/status_400_bad_request"
+          description: Bad Request
         "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/status_401_unauthorized"
           description: Unauthorized
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/status_403_forbidden"
+          description: Forbidden
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/status_404_not_found"
+          description: Not Found
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/status_500_internal_server_error"
+          description: Internal Server Error
       security:
       - bearerAuth: []
       summary: Export keyring(s) for one or more CephX users
@@ -153,18 +260,46 @@ paths:
         style: simple
       responses:
         "200":
-          description: Deleted
-        "404":
-          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/status_200_ok_no_content"
+          description: OK
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/status_400_bad_request"
+          description: Bad Request
         "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/status_401_unauthorized"
           description: Unauthorized
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/status_403_forbidden"
+          description: Forbidden
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/status_404_not_found"
+          description: Not Found
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/status_500_internal_server_error"
+          description: Internal Server Error
       security:
       - bearerAuth: []
       summary: Delete a CephX user
       tags:
       - Cluster User
-      x-accepts:
-      - application/vnd.ceph.api.v1.0+json
       x-openapi-router-controller: fabric_ceph.openapi_server.controllers.cluster_user_controller
   /version:
     get:
@@ -201,9 +336,9 @@ components:
       example:
         size: 0
         data:
-        - reference: https://github.com/fabric-testbed/ControlFramework
+        - reference: https://github.com/fabric-testbed/fabric_ceph
           version: 1.0.0
-        - reference: https://github.com/fabric-testbed/ControlFramework
+        - reference: https://github.com/fabric-testbed/fabric_ceph
           version: 1.0.0
         type: type
         status: 6
@@ -211,11 +346,11 @@ components:
       type: object
     version_data:
       example:
-        reference: https://github.com/fabric-testbed/ControlFramework
+        reference: https://github.com/fabric-testbed/fabric_ceph
         version: 1.0.0
       properties:
         reference:
-          example: https://github.com/fabric-testbed/ControlFramework
+          example: https://github.com/fabric-testbed/fabric_ceph
           title: reference
           type: string
         version:
@@ -241,6 +376,170 @@ components:
           type: string
       title: status_200_ok_single
       type: object
+    status_200_ok_no_content:
+      example:
+        data:
+        - details: details
+          message: No Content
+        - details: details
+          message: No Content
+        size: 0
+        type: no_content
+        status: 6
+      properties:
+        data:
+          items:
+            $ref: "#/components/schemas/status_200_ok_no_content_data"
+          title: data
+          type: array
+        type:
+          default: no_content
+          title: type
+          type: string
+        size:
+          default: 1
+          title: size
+          type: integer
+        status:
+          default: 200
+          title: status
+          type: integer
+      title: status_200_ok_no_content
+      type: object
+    status_200_ok_paginated:
+      properties:
+        limit:
+          title: limit
+          type: integer
+        offset:
+          title: offset
+          type: integer
+        size:
+          title: size
+          type: integer
+        status:
+          default: 200
+          title: status
+          type: integer
+        total:
+          title: total
+          type: integer
+        type:
+          title: type
+          type: string
+      title: status_200_ok_paginated
+      type: object
+    status_400_bad_request:
+      example:
+        errors:
+        - size: 2
+          details: details
+          message: Bad Request
+          type: error
+          status: 7
+        - size: 2
+          details: details
+          message: Bad Request
+          type: error
+          status: 7
+      properties:
+        errors:
+          items:
+            $ref: "#/components/schemas/status_400_bad_request_errors"
+          title: errors
+          type: array
+      title: status_400_bad_request
+      type: object
+    status_401_unauthorized:
+      example:
+        size: 9
+        type: error
+        errors:
+        - details: details
+          message: Unauthorized
+        - details: details
+          message: Unauthorized
+        status: 3
+      properties:
+        errors:
+          items:
+            $ref: "#/components/schemas/status_401_unauthorized_errors"
+          title: errors
+          type: array
+        type:
+          default: error
+          title: type
+          type: string
+        size:
+          default: 1
+          title: size
+          type: integer
+        status:
+          default: 401
+          title: status
+          type: integer
+      title: status_401_unauthorized
+      type: object
+    status_403_forbidden:
+      example:
+        size: 2
+        type: error
+        errors:
+        - details: details
+          message: Forbidden
+        - details: details
+          message: Forbidden
+        status: 4
+      properties:
+        errors:
+          items:
+            $ref: "#/components/schemas/status_403_forbidden_errors"
+          title: errors
+          type: array
+        type:
+          default: error
+          title: type
+          type: string
+        size:
+          default: 1
+          title: size
+          type: integer
+        status:
+          default: 403
+          title: status
+          type: integer
+      title: status_403_forbidden
+      type: object
+    status_404_not_found:
+      example:
+        size: 7
+        type: error
+        errors:
+        - details: details
+          message: Not Found
+        - details: details
+          message: Not Found
+        status: 1
+      properties:
+        errors:
+          items:
+            $ref: "#/components/schemas/status_404_not_found_errors"
+          title: errors
+          type: array
+        type:
+          default: error
+          title: type
+          type: string
+        size:
+          default: 1
+          title: size
+          type: integer
+        status:
+          default: 404
+          title: status
+          type: integer
+      title: status_404_not_found
+      type: object
     status_500_internal_server_error:
       example:
         size: 1
@@ -250,7 +549,7 @@ components:
           message: Internal Server Error
         - details: details
           message: Internal Server Error
-        status: 5
+        status: 1
       properties:
         errors:
           items:
@@ -271,6 +570,89 @@ components:
           type: integer
       title: status_500_internal_server_error
       type: object
+    status_200_ok_no_content_data:
+      example:
+        details: details
+        message: No Content
+      properties:
+        message:
+          default: No Content
+          type: string
+        details:
+          type: string
+      title: status_200_ok_no_content_data
+      type: object
+    status_400_bad_request_errors:
+      example:
+        size: 2
+        details: details
+        message: Bad Request
+        type: error
+        status: 7
+      properties:
+        message:
+          default: Bad Request
+          title: message
+          type: string
+        details:
+          title: details
+          type: string
+        type:
+          default: error
+          title: type
+          type: string
+        size:
+          default: 1
+          title: size
+          type: integer
+        status:
+          default: 400
+          title: status
+          type: integer
+      title: status_400_bad_request_errors
+      type: object
+    status_401_unauthorized_errors:
+      example:
+        details: details
+        message: Unauthorized
+      properties:
+        message:
+          default: Unauthorized
+          title: message
+          type: string
+        details:
+          title: details
+          type: string
+      title: status_401_unauthorized_errors
+      type: object
+    status_403_forbidden_errors:
+      example:
+        details: details
+        message: Forbidden
+      properties:
+        message:
+          default: Forbidden
+          title: message
+          type: string
+        details:
+          title: details
+          type: string
+      title: status_403_forbidden_errors
+      type: object
+    status_404_not_found_errors:
+      example:
+        details: details
+        message: Not Found
+      properties:
+        message:
+          default: Not Found
+          title: message
+          type: string
+        details:
+          title: details
+          type: string
+      title: status_404_not_found_errors
+      type: object
     status_500_internal_server_error_errors:
       example:
         details: details
@@ -284,6 +666,16 @@ components:
           title: details
           type: string
       title: status_500_internal_server_error_errors
+      type: object
+    metrics:
+      allOf:
+      - $ref: "#/components/schemas/status_200_ok_single"
+      - properties:
+          results:
+            items:
+              type: object
+            type: array
+        type: object
       type: object
     Capability:
       example:
@@ -329,6 +721,47 @@ components:
       - capabilities
       - user_entity
       title: CreateOrUpdateUserRequest
+      type: object
+    users:
+      allOf:
+      - $ref: "#/components/schemas/status_200_ok_paginated"
+      - properties:
+          data:
+            items:
+              $ref: "#/components/schemas/CephUser"
+            type: array
+        type: object
+      example:
+        total: 5
+        offset: 6
+        size: 1
+        data:
+        - user_entity: client.demo
+          metadata:
+            key: ""
+          capabilities:
+          - cap: allow rw
+            entity: mds
+          - cap: allow rw
+            entity: mds
+          keys:
+          - "{}"
+          - "{}"
+        - user_entity: client.demo
+          metadata:
+            key: ""
+          capabilities:
+          - cap: allow rw
+            entity: mds
+          - cap: allow rw
+            entity: mds
+          keys:
+          - "{}"
+          - "{}"
+        limit: 0
+        type: type
+        status: 5
+      title: users
       type: object
     CephUser:
       example:
@@ -385,6 +818,16 @@ components:
       - entities
       title: ExportUsersRequest
       type: object
+    keyrings:
+      allOf:
+      - $ref: "#/components/schemas/status_200_ok_paginated"
+      - properties:
+          data:
+            items:
+              $ref: "#/components/schemas/keyrings_allOf_data"
+            type: array
+        type: object
+      type: object
     exportUsers_200_response_oneOf:
       properties:
         keyring:
@@ -397,6 +840,11 @@ components:
       - $ref: "#/components/schemas/exportUsers_200_response_oneOf"
       - type: string
       title: exportUsers_200_response
+    keyrings_allOf_data:
+      oneOf:
+      - $ref: "#/components/schemas/exportUsers_200_response_oneOf"
+      - type: string
+      title: keyrings_allOf_data
   securitySchemes:
     bearerAuth:
       bearerFormat: JWT

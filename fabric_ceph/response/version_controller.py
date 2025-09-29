@@ -23,45 +23,31 @@
 #
 #
 # Author: Komal Thareja (kthare10@renci.org)
-import logging
-import time
-import traceback
-from json import encoder
+from fabric_ceph.openapi_server.models import Version, VersionData
+from fabric_ceph.response.cors_response import cors_200, cors_500
+from fabric_ceph import __version__
 
-import connexion
-import waitress
-
-from fabric_ceph.common.config import Config, get_cfg
-from fabric_ceph.common.globals import get_globals
-from fabric_ceph.common.graceful_interrupt_handler import GracefulInterruptHandler
+__API_REFERENCE__ = 'https://github.com/fabric-testbed/fabric_ceph'
 
 
-def main():
+def version_get() -> Version:  # noqa: E501
+    """version
 
+    Version # noqa: E501
+
+
+    :rtype: Version
+    """
     try:
-        with GracefulInterruptHandler() as h:
-
-            globals = get_globals()
-            port = globals.config.runtime.port
-            if port is None:
-                raise Exception("Invalid configuration rest port not specified")
-
-            print("Starting REST")
-            # start swagger
-            app = connexion.App(__name__, specification_dir='openapi_server/openapi/')
-            app.json = encoder.JSONEncoder
-            app.add_api('openapi.yaml', arguments={'title': 'Fabric CEPH API'}, pythonic_params=True)
-
-            # Start up the server to expose the metrics.
-            waitress.serve(app, port=int(port), threads=8)
-
-            while True:
-                time.sleep(0.0001)
-                if h.interrupted:
-                    break
-    except Exception:
-        traceback.print_exc()
-
-
-if __name__ == '__main__':
-    main()
+        version = VersionData()
+        version.reference = __API_REFERENCE__
+        version.version = __version__
+        response = Version()
+        response.data = [version]
+        response.size = len(response.data)
+        response.status = 200
+        response.type = 'version'
+        return cors_200(response_body=response)
+    except Exception as exc:
+        details = 'Oops! something went wrong with version_get(): {0}'.format(exc)
+        return cors_500(details=details)

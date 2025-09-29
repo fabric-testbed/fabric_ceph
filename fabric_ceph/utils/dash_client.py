@@ -21,6 +21,7 @@ class DashClient:
     def for_cluster(cls, name: str, cluster: ClusterEntry) -> "DashClient":
         # Default verify: True for HTTPS endpoints, False for HTTP endpoints
         parsed = urlparse(cluster.dashboard.primary_endpoint)
+        '''
         verify_tls_env = os.getenv(f"{name.upper().replace('-', '_')}_VERIFY_TLS")
         verify_tls_default = (parsed.scheme == "https")
         verify_tls = (
@@ -28,6 +29,8 @@ class DashClient:
             if verify_tls_env is None
             else verify_tls_env.strip().lower() in {"1", "true", "yes", "on"}
         )
+        '''
+        verify_tls = False
         token = cluster.dashboard.login_get_jwt(verify_tls=verify_tls)
         return cls(name, cluster, token, verify_tls)
 

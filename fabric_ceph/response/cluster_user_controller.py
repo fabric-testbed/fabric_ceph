@@ -41,8 +41,7 @@ def create_user(body: dict):  # noqa: E501
         response = Users()
         user = CephUser(user_entity=body.get('user_entity'),
                         capabilities=body.get('capabilities'),
-                        keys=[])
-        user.keys.append(result.get('keyring'))
+                        keys=[result.get('key_ring')],)
         response.data = [user]
         response.size = len(response.data)
         response.type = "users"

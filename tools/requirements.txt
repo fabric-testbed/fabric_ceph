@@ -1,0 +1,5 @@
+pytz
+fabric_ceph_client
+pandas
+matplotlib
+ipywidgets

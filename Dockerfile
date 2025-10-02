@@ -26,7 +26,7 @@ RUN python -m pip install --no-cache-dir /usr/src/app
 COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
 RUN chmod +x /usr/local/bin/docker-entrypoint.sh
 
-EXPOSE 11000 8700
+EXPOSE 3500
 
 ENTRYPOINT ["docker-entrypoint.sh"]
 CMD ["fabric_ceph"]

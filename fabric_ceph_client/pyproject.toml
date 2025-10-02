@@ -1,0 +1,18 @@
+[project]
+name = "fabric_ceph_client"
+version = "1.0.0"
+description = "FABRIC Ceph Manager Client API"
+readme = "README.md"
+authors = [{ name = "Komal Thareja", email = "kthare10@renci.org" }]
+license = { text = "Apache-2.0" }
+requires-python = ">=3.8"
+
+dependencies = ["requests"]
+
+[build-system]
+requires = ["flint"]
+build-backend = "flint.buildapi"
+
+[tool.flint]
+package = "fabric_ceph_client"
+

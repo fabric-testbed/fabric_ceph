@@ -18,8 +18,8 @@ cluster:
       ssh_key: ~/.ssh/id_rsa_ceph
 
 runtime:
-  service_project:
-  port:
+  service_project: 6b8dd6eb-4b2b-4656-b3ee-ce61f91a12b4
+  port: 3500
 
 logging:
   ## The directory in which actor should create log files.
@@ -51,6 +51,6 @@ oauth:
   verify-exp: True
 
 core_api:
-  enable: False
+  enable: True
   host: https://uis.fabric-testbed.net
   token:

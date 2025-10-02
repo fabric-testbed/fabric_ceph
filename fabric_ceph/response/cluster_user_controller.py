@@ -3,7 +3,8 @@ import connexion
 from fabric_ceph.common.globals import get_globals
 from fabric_ceph.openapi_server.models import Users, CephUser, Status200OkNoContent
 from fabric_ceph.openapi_server.models.export_users_request import ExportUsersRequest  # noqa: E501
-from fabric_ceph.utils.utils import cors_success_response, cors_error_response
+from fabric_ceph.response.cors_response import cors_401
+from fabric_ceph.utils.utils import cors_success_response, cors_error_response, authorize
 from fabric_ceph.utils.create_ceph_user import ensure_user_across_clusters
 from fabric_ceph.utils.delete_ceph_user import delete_user_across_clusters
 from fabric_ceph.utils.export_ceph_user import export_users_first_success, list_users_first_success
@@ -25,7 +26,9 @@ def create_user(body: dict):  # noqa: E501
     log.debug("Processing CephX create request")
 
     try:
-        #authorize()
+        fabric_token, is_operator, bastion_login = authorize()
+        if not is_operator:
+            return cors_401(details=f"{fabric_token.uuid}/{fabric_token.email} is not authorized!")
 
         cfg = globals.config
         result = ensure_user_across_clusters(cfg=cfg, user_entity=body.get('user_entity'),
@@ -62,7 +65,9 @@ def delete_user(entity):  # noqa: E501
     log.debug("Processing CephX delete request")
 
     try:
-        #authorize()
+        fabric_token, is_operator, bastion_login = authorize()
+        if not is_operator:
+            return cors_401(details=f"{fabric_token.uuid}/{fabric_token.email} is not authorized!")
 
         cfg = globals.config
         result = delete_user_across_clusters(cfg=cfg, user_entity=entity)
@@ -98,7 +103,12 @@ def export_users(body):  # noqa: E501
     log.debug("Processing CephX export request")
 
     try:
-        #authorize()
+        fabric_token, is_operator, bastion_login = authorize()
+        if len(export_users_request.entities) == 1 and bastion_login.lower() not in export_users_request.entities[0].lower():
+            return cors_401(details=f"{fabric_token.uuid}/{fabric_token.email} is not authorized!")
+
+        if len(export_users_request.entities) > 1 and not is_operator:
+            return cors_401(details=f"{fabric_token.uuid}/{fabric_token.email} is not authorized!")
 
         cfg = globals.config
         result = export_users_first_success(cfg=cfg, entities=export_users_request.entities)
@@ -129,7 +139,9 @@ def list_users():  # noqa: E501
     log.debug("Processing CephX list request")
 
     try:
-        #authorize()
+        fabric_token, is_operator, bastion_login = authorize()
+        if not is_operator:
+            return cors_401(details=f"{fabric_token.uuid}/{fabric_token.email} is not authorized!")
 
         cfg = globals.config
         result = list_users_first_success(cfg=cfg)
@@ -161,7 +173,9 @@ def update_user(body):  # noqa: E501
     log.debug("Processing CephX update request")
 
     try:
-        #authorize()
+        fabric_token, is_operator, bastion_login = authorize()
+        if not is_operator:
+            return cors_401(details=f"{fabric_token.uuid}/{fabric_token.email} is not authorized!")
 
         cfg = globals.config
         result = update_user_across_clusters(cfg=cfg, user_entity=body.get('user_entity'),

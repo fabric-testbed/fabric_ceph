@@ -31,9 +31,11 @@ from flask import Response, request
 
 from fabric_ceph.common.config import Config
 from fabric_ceph.common.globals import get_globals
+from fabric_ceph.external_api.core_api import CoreApi, CoreApiError
 from fabric_ceph.response.ceph_exception import CephException
 from fabric_ceph.response.cors_response import cors_401, cors_400, cors_403, cors_404, cors_500, cors_200, cors_response
-from fabric_ceph.security.fabric_token import FabricToken
+from fabric_ceph.security import fabric_token
+from fabric_ceph.security.fabric_token import FabricToken, TokenException
 from fabric_ceph.utils.dash_client import DashClient
 
 
@@ -45,17 +47,56 @@ def get_token() -> str:
         result = f"{token}"
     return result
 
-def authorize() -> Union[FabricToken, dict, Response]:
+from typing import Tuple, Optional
+import logging
+
+def authorize() -> Tuple[FabricToken, bool, Optional[str]]:
+    """
+    Validate the caller's bearer token, determine whether they are an owner of the
+    configured service project, and return the user's bastion login (if present).
+
+    Returns:
+        (fabric_token, is_owner, bastion_login)
+    Raises:
+        TokenException: if the token is invalid or missing required claims.
+        CoreApiError: for Core API communication or response errors (unless caught below).
+    """
     token = get_token()
-    globals = get_globals()
+    globals_ = get_globals()
 
-    # Validate Fabric token
-    fabric_token = globals.token_validator.validate_token(token=token, verify_exp=globals.config.oauth.verify_exp)
+    # Validate token (and expiry if configured)
+    fabric_token = globals_.token_validator.validate_token(
+        token=token,
+        verify_exp=globals_.config.oauth.verify_exp,
+    )
+    if not fabric_token or not fabric_token.uuid:
+        raise TokenException("Token is missing required 'uuid' claim.")
 
-    if not fabric_token.roles:
-        return cors_401(details=f"{fabric_token.uuid}/{fabric_token.email} is not authorized!")
+    # Core API client (optionally honor a configured timeout if you have one)
+    timeout = getattr(getattr(globals_.config, "core_api", object()), "timeout", 15.0)
+    core_api = CoreApi(core_api_host=globals_.config.core_api.host, token=token, timeout=timeout)
 
-    return fabric_token
+    # Fetch user info
+    user_info = core_api.get_user_info(uuid=fabric_token.uuid) or {}
+    bastion_login: Optional[str] = user_info.get("bastion_login")
+
+    # Determine service-project ownership
+    service_project_id = globals_.config.runtime.service_project
+    is_owner = False
+    try:
+        # get_user_projects returns tags/memberships when a specific project_id is requested
+        projects = core_api.get_user_projects(project_id=service_project_id, uuid=fabric_token.uuid) or []
+        svc_proj = next((p for p in projects if p.get("uuid") == service_project_id), projects[0] if projects else None)
+        if svc_proj:
+            memberships = svc_proj.get("memberships") or {}
+            is_owner = bool(memberships.get("is_owner", False))
+    except CoreApiError as e:
+        # If the user isn't in the service project or the project is expired,
+        # CoreApi may raise; treat as not owner but proceed with token and bastion_login.
+        raise CephException(str(e), http_error_code=UNAUTHORIZED)
+
+    return fabric_token, is_owner, bastion_login
+
 
 
 def cors_error_response(error: Union[CephException, Exception]) -> Response:

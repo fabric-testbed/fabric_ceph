@@ -1,66 +1,86 @@
-from typing import Tuple
+from typing import Tuple, Optional, List, Dict, Any
 
 
 class TokenException(Exception):
     """
-    Token exception
+    Custom exception for token errors
     """
 
 
 class FabricToken:
     """
-    Represents the Fabric Token issues by Credential Manager
+    Represents a Fabric Token issued by the Credential Manager
     """
+
     def __init__(self, *, decoded_token: dict, token_hash: str):
-        self.decoded_token = decoded_token
-        self.hash = token_hash
+        self.decoded_token: Dict[str, Any] = decoded_token
+        self._hash: str = token_hash
 
     @property
-    def token_hash(self):
-        return self.hash
+    def token_hash(self) -> str:
+        """Return the hash of the token."""
+        return self._hash
 
     @property
-    def token(self):
+    def token(self) -> Dict[str, Any]:
+        """Return the full decoded token."""
         return self.decoded_token
 
     @property
-    def uuid(self) -> str:
+    def uuid(self) -> Optional[str]:
+        """Return the token UUID."""
         return self.decoded_token.get("uuid")
 
     @property
-    def subject(self) -> str:
-        """
-        Get subject
-        @return subject
-        """
+    def subject(self) -> Optional[str]:
+        """Return the subject (`sub`)."""
         return self.decoded_token.get("sub")
 
     @property
-    def email(self) -> str:
-        """
-        Get email
-        @return email
-        """
+    def email(self) -> Optional[str]:
+        """Return the email address."""
         return self.decoded_token.get("email")
 
     @property
-    def projects(self) -> list or None:
-        """
-        Get projects
-        @return projects
-        """
+    def projects(self) -> Optional[List[Dict[str, Any]]]:
+        """Return the list of projects (if any)."""
         return self.decoded_token.get("projects")
 
     @property
-    def roles(self) -> list:
-        return self.decoded_token.get("roles")
-
-    def __str__(self):
-        return f"Token: {self.decoded_token}"
+    def roles(self) -> List[Dict[str, str]]:
+        """Return the roles as a list of dicts."""
+        return self.decoded_token.get("roles", [])
 
     @property
-    def first_project(self) -> Tuple[str or None, str or None, str or None]:
-        if self.projects is None or len(self.projects) == 0:
-            return None, None, None
+    def role_names(self) -> List[str]:
+        """Return only the role names as a flat list."""
+        return [r.get("name") for r in self.roles if "name" in r]
 
-        return self.projects[0].get("uuid"), self.projects[0].get("tags"), self.projects[0].get("name")
+    @property
+    def first_project(self) -> Tuple[Optional[str], Optional[List[str]], Optional[str]]:
+        """
+        Return (uuid, tags, name) of the first project if present.
+        """
+        if not self.projects:
+            return None, None, None
+        p = self.projects[0]
+        return p.get("uuid"), p.get("tags"), p.get("name")
+
+    def get_project_by_uuid(self, uuid: str) -> Optional[Dict[str, Any]]:
+        """Return project dict by UUID if found."""
+        if not self.projects:
+            return None
+        return next((p for p in self.projects if p.get("uuid") == uuid), None)
+
+    def get_project_tags(self, uuid: str) -> List[str]:
+        """Return list of tags for a given project UUID, or empty list."""
+        project = self.get_project_by_uuid(uuid)
+        return project.get("tags", []) if project else []
+
+    def get_project_memberships(self, uuid: str) -> Dict[str, bool]:
+        """Return memberships dict for a given project UUID, or empty dict."""
+        project = self.get_project_by_uuid(uuid)
+        return project.get("memberships", {}) if project else {}
+
+    def __str__(self) -> str:
+        return f"FabricToken(uuid={self.uuid}, subject={self.subject}, email={self.email})"

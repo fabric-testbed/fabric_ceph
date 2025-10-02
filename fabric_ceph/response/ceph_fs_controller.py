@@ -9,7 +9,9 @@ from fabric_ceph.openapi_server.models import SubvolumeInfo, SubvolumeExists
 from fabric_ceph.openapi_server.models.status200_ok_no_content import Status200OkNoContent  # noqa: E501
 from fabric_ceph.openapi_server.models.subvolume_create_or_resize_request import SubvolumeCreateOrResizeRequest  # noqa: E501
 from fabric_ceph.response.ceph_exception import CephException
-from fabric_ceph.utils.utils import cors_success_response, cors_error_response, ordered_cluster_names, build_clients
+from fabric_ceph.response.cors_response import cors_401
+from fabric_ceph.utils.utils import cors_success_response, cors_error_response, ordered_cluster_names, build_clients, \
+    authorize
 from fabric_ceph.utils.ceph_fs_helper import ensure_subvolume_across_clusters, delete_subvolume_across_clusters
 
 
@@ -30,7 +32,10 @@ def create_or_resize_subvolume(vol_name, body):  # noqa: E501
     log.debug("Processing CephFs create request")
 
     try:
-        # authorize()
+        fabric_token, is_operator, bastion_login = authorize()
+        if not is_operator:
+            return cors_401(details=f"{fabric_token.uuid}/{fabric_token.email} is not authorized!")
+
         subvolume_create_or_resize_request = body
         if connexion.request.is_json:
             subvolume_create_or_resize_request = SubvolumeCreateOrResizeRequest.from_dict(
@@ -79,7 +84,9 @@ def delete_subvolume(vol_name, subvol_name, group_name=None, force=None):  # noq
     log.debug("Processing CephFs delete request")
 
     try:
-        # authorize()
+        fabric_token, is_operator, bastion_login = authorize()
+        if not is_operator:
+            return cors_401(details=f"{fabric_token.uuid}/{fabric_token.email} is not authorized!")
 
         cfg = globals.config
         result = delete_subvolume_across_clusters(cfg=cfg,
@@ -116,6 +123,10 @@ def get_subvolume_info(vol_name, subvol_name, group_name=None):  # noqa: E501
     g = get_globals()
     log = g.log
     try:
+        fabric_token, is_operator, bastion_login = authorize()
+        if vol_name.lower() != bastion_login.lower():
+            return cors_401(details=f"{fabric_token.uuid}/{fabric_token.email} is not authorized to access {vol_name}!")
+
         cfg: Config = g.config
         names = ordered_cluster_names(cfg)
         clients = build_clients(cfg, names)
@@ -156,6 +167,10 @@ def subvolume_exists(vol_name, subvol_name, group_name=None):  # noqa: E501
     g = get_globals()
     log = g.log
     try:
+        fabric_token, is_operator, bastion_login = authorize()
+        if vol_name.lower() != bastion_login.lower():
+            return cors_401(details=f"{fabric_token.uuid}/{fabric_token.email} is not authorized to access {vol_name}!")
+
         cfg: Config = g.config
         names = ordered_cluster_names(cfg)
         clients = build_clients(cfg, names)

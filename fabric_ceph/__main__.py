@@ -31,7 +31,6 @@ from json import encoder
 import connexion
 import waitress
 
-from fabric_ceph.common.config import Config, get_cfg
 from fabric_ceph.common.globals import get_globals
 from fabric_ceph.common.graceful_interrupt_handler import GracefulInterruptHandler
 

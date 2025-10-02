@@ -33,11 +33,7 @@ from fabric_cm.credmgr.swagger_client.rest import ApiException
 from fss_utils.jwt_manager import ValidateCode
 from fss_utils.jwt_validate import JWTValidator
 
-from fabric_ceph.security.fabric_token import FabricToken
-
-
-class TokenException(Exception):
-    pass
+from fabric_ceph.security.fabric_token import FabricToken, TokenException
 
 
 class TokenValidator:

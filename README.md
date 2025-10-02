@@ -340,22 +340,3 @@ curl -s -X DELETE "http://localhost:3500/cephfs/subvolume/CEPH-FS-01?subvol_name
 MIT © 2025 FABRIC Testbed
 
 ---
-
-## Acknowledgements
-
-* Ceph Dashboard REST API (for authentication and cluster/user/cephfs management).
-* Thanks to contributors for testing multi-cluster synchronization and API shape validation.
-
-
-## Code gen
-Swagger API is maintained here: https://app.swaggerhub.com/apis/RENCI3/ceph/1.0.0
-
-Generate the code using the following commands
-this should place latest code in `openapi_server` and old code in `openapi_server_archive`
-Merge as needed
-```
-cd fabric_ceph
-openapi-generator validate -i openapi.yml
-openapi-generator generate -i openapi.yml -g python-flask -o python-flask-server-generated
-./swagger_code_gen.sh
-```

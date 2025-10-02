@@ -1,25 +1,32 @@
-FROM python:3.13.0
-MAINTAINER Komal Thareja<komal.thareja@gmail.com>
+FROM python:3.13.0-slim
 
-RUN mkdir -p /usr/src/app
+LABEL maintainer="Komal Thareja <komal.thareja@gmail.com>"
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1
+
 WORKDIR /usr/src/app
-VOLUME ["/usr/src/app"]
 
-EXPOSE 11000
-EXPOSE 8700
+# OS deps
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends cron && \
+    rm -rf /var/lib/apt/lists/*
 
-RUN apt-get update
-RUN apt-get install cron -y
+# 1) Install Python deps first (cache-friendly)
+COPY requirements.txt /usr/src/app/requirements.txt
+RUN python -m pip install --upgrade pip && \
+    python -m pip install --no-cache-dir -r requirements.txt
 
-COPY docker-entrypoint.sh /usr/src/app/
+# 2) Copy project and install package
 COPY fabric_ceph /usr/src/app/fabric_ceph
-COPY pyproject.toml /usr/src/app/
-COPY ./README.md /usr/src/app/
-COPY LICENSE /usr/src/app/
+COPY pyproject.toml README.md LICENSE /usr/src/app/
+RUN python -m pip install --no-cache-dir /usr/src/app
 
-RUN pip3 install .
-RUN mkdir -p "/etc/fabric/ceph/config/"
-RUN mkdir -p "/var/log/ceph-mgr"
+# 3) Entrypoint
+COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
+RUN chmod +x /usr/local/bin/docker-entrypoint.sh
 
-ENTRYPOINT ["/usr/src/app/docker-entrypoint.sh"]
+EXPOSE 11000 8700
+
+ENTRYPOINT ["docker-entrypoint.sh"]
 CMD ["fabric_ceph"]

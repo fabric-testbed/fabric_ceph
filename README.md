@@ -18,11 +18,11 @@ Built with **Flask/Connexion** (OpenAPI-first), `requests` for Dashboard calls, 
 * [Features](#features)
 * [Architecture](#architecture)
 * [OpenAPI](#openapi)
+* [Code generation](#code-generation)
 * [Configuration](#configuration)
 * [Running locally](#running-locally)
 * [Docker](#docker)
 * [API usage (curl)](#api-usage-curl)
-
   * [CephX users](#cephx-users)
   * [CephFS subvolumes](#cephfs-subvolumes)
 * [Multi-cluster behavior](#multi-cluster-behavior)

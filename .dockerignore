@@ -1,3 +1,10 @@
+.travis.yaml
+.openapi-generator-ignore
+../tox.ini
+git_push.sh
+../test-requirements.txt
+../setup.py
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
@@ -45,9 +52,7 @@ coverage.xml
 *,cover
 .hypothesis/
 venv/
-.venv/
 .python-version
-.pytest_cache
 
 # Translations
 *.mo
@@ -64,5 +69,3 @@ target/
 
 # Ipython Notebook
 .ipynb_checkpoints
-.idea
-.log

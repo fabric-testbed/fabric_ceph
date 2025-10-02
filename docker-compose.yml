@@ -1,0 +1,35 @@
+services:
+  nginx:
+    image: library/nginx:1
+    container_name: ceph-mgr-nginx
+    depends_on:
+      - ceph-mgr
+    networks:
+      - frontend
+      - backend    
+    ports:
+      - "0.0.0.0:443:443"
+    volumes:
+      - ./nginx/default.conf:/etc/nginx/conf.d/default.conf
+      - ./certs/fullchain.pem:/etc/ssl/public.pem
+      - ./certs/privkey.pem:/etc/ssl/private.pem
+      - /opt/data/production/logs/nginx/ceph-mgr:/var/log/nginx
+    restart: always
+  ceph-mgr:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: ceph-mgr:1.9.0
+    container_name: ceph-mgr
+    restart: always
+    networks:
+      - backend
+    environment:
+      - APP_CONFIG_PATH=/etc/fabric/ceph/config/config.yml
+    volumes:
+      - ./fabric_ceph/config.yml:/etc/fabric/ceph/config/config.yml
+      - ./logs/:/var/log/ceph-mgr
+networks:
+  frontend:
+  backend:
+    internal: true

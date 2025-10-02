@@ -1,0 +1,930 @@
+openapi: 3.0.3
+info:
+  title: Ceph Dashboard – Auth & Cluster User API
+  version: 1.0.0
+  description: |
+    Minimal OpenAPI definition for building an app around Ceph Dashboard REST endpoints used to
+    manage CephX users and authenticate via JWT. These paths mirror the documented `/api` surface.
+
+servers:
+  # Added by API Auto Mocking Plugin
+  - description: Local development server
+    url: http://localhost:3500
+  - description: SwaggerHub API Auto Mocking
+    url: https://virtserver.swaggerhub.com/RENCI3/ceph/1.0.0
+  - url: https://{host}:{port}/api
+    variables:
+      host:
+        default: mgr.example.org
+      port:
+        default: "8443"
+
+tags:
+  - name: Cluster User
+  - name: CephFS
+  - name: version
+
+paths:
+
+  /cephfs/subvolume/{vol_name}:
+    put:
+      tags: [CephFS]
+      summary: Create or resize a subvolume
+      description: >
+        Creates a new subvolume (if it does not exist) or resizes an existing one.
+        Omit `size` to create without a quota (unlimited). Send `size` (bytes) to set/resize the quota.
+      operationId: createOrResizeSubvolume
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: vol_name
+          required: true
+          schema:
+            type: string
+          description: CephFS volume name (filesystem), e.g. `CEPH-FS-01`
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SubvolumeCreateOrResizeRequest'
+            examples:
+              createNoQuota:
+                value:
+                  subvol_name: alice
+                  group_name: fabric_staff
+                  mode: "0777"
+              createWithQuota:
+                value:
+                  subvol_name: bob
+                  group_name: fabric_staff
+                  size: 10737418240
+                  mode: "0770"
+              resize:
+                value:
+                  subvol_name: bob
+                  group_name: fabric_staff
+                  size: 536870912
+      responses:
+        "200":
+          description: OK (created or resized)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/status_200_ok_no_content'
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/status_200_ok_no_content'
+        "400":
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/status_400_bad_request'
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/status_401_unauthorized'
+        "403":
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/status_403_forbidden'
+        "404":
+          description: Not Found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/status_404_not_found'
+        "500":
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/status_500_internal_server_error'
+
+    delete:
+      tags: [CephFS]
+      summary: Delete a subvolume
+      operationId: deleteSubvolume
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: vol_name
+          required: true
+          schema:
+            type: string
+          description: CephFS volume name (filesystem)
+        - in: query
+          name: subvol_name
+          required: true
+          schema:
+            type: string
+        - in: query
+          name: group_name
+          required: false
+          schema:
+            type: string
+        - in: query
+          name: force
+          required: false
+          schema:
+            type: boolean
+            default: false
+          description: Force delete even if snapshots exist (behavior depends on cluster policy)
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/status_200_ok_no_content'
+        "400":
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/status_400_bad_request'
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/status_401_unauthorized'
+        "403":
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/status_403_forbidden'
+        "404":
+          description: Not Found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/status_404_not_found'
+        "500":
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/status_500_internal_server_error'
+
+  /cephfs/subvolume/{vol_name}/info:
+    get:
+      tags: [CephFS]
+      summary: Get subvolume info (path)
+      description: Returns subvolume details; use the `path` field as the mount path (equivalent to `getpath`).
+      operationId: getSubvolumeInfo
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: vol_name
+          required: true
+          schema:
+            type: string
+          description: CephFS volume name (filesystem)
+        - in: query
+          name: subvol_name
+          required: true
+          schema:
+            type: string
+        - in: query
+          name: group_name
+          required: false
+          schema:
+            type: string
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SubvolumeInfo'
+        "400":
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/status_400_bad_request'
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/status_401_unauthorized'
+        "403":
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/status_403_forbidden'
+        "404":
+          description: Not Found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/status_404_not_found'
+        "500":
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/status_500_internal_server_error'
+
+  /cephfs/subvolume/{vol_name}/exists:
+    get:
+      tags: [CephFS]
+      summary: Check whether a subvolume exists
+      operationId: subvolumeExists
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: vol_name
+          required: true
+          schema:
+            type: string
+        - in: query
+          name: subvol_name
+          required: true
+          schema:
+            type: string
+        - in: query
+          name: group_name
+          required: false
+          schema:
+            type: string
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SubvolumeExists'
+        "400":
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/status_400_bad_request'
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/status_401_unauthorized'
+        "403":
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/status_403_forbidden'
+        "500":
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/status_500_internal_server_error'
+
+  /version:
+    get:
+      tags:
+      - version
+      summary: Version
+      description: Version
+      operationId: version_get
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/version'
+        "500":
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/status_500_internal_server_error'
+
+  /cluster/user:
+    get:
+      tags: [Cluster User]
+      summary: List all CephX users
+      operationId: listUsers
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/users"
+        "400":
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/status_400_bad_request'
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/status_401_unauthorized'
+        "403":
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/status_403_forbidden'
+        "404":
+          description: Not Found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/status_404_not_found'
+        "500":
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/status_500_internal_server_error'
+
+    post:
+      tags: [Cluster User]
+      summary: Create a CephX user (with capabilities)
+      operationId: createUser
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateOrUpdateUserRequest'
+            examples:
+              basic:
+                value:
+                  user_entity: client.demo
+                  capabilities:
+                    - entity: mon
+                      cap: "allow r"
+                    - entity: osd
+                      cap: "allow rwx"
+                    - entity: mds
+                      cap: "allow rw"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/users"
+        "400":
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/status_400_bad_request'
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/status_401_unauthorized'
+        "403":
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/status_403_forbidden'
+        "404":
+          description: Not Found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/status_404_not_found'
+        "500":
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/status_500_internal_server_error'
+
+    put:
+      tags: [Cluster User]
+      summary: Update/overwrite capabilities for a CephX user
+      operationId: updateUser
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateOrUpdateUserRequest'
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/users"
+        "400":
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/status_400_bad_request'
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/status_401_unauthorized'
+        "403":
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/status_403_forbidden'
+        "404":
+          description: Not Found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/status_404_not_found'
+        "500":
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/status_500_internal_server_error'
+
+  /cluster/user/{entity}:
+    delete:
+      tags: [Cluster User]
+      summary: Delete a CephX user
+      operationId: deleteUser
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: entity
+          required: true
+          schema:
+            type: string
+          description: CephX entity, e.g., `client.demo`
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/status_200_ok_no_content'
+        "400":
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/status_400_bad_request'
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/status_401_unauthorized'
+        "403":
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/status_403_forbidden'
+        "404":
+          description: Not Found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/status_404_not_found'
+        "500":
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/status_500_internal_server_error'
+
+  /cluster/user/export:
+    post:
+      tags: [Cluster User]
+      summary: Export keyring(s) for one or more CephX users
+      operationId: exportUsers
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ExportUsersRequest'
+            examples:
+              single:
+                value:
+                  entities: ["client.demo"]
+              multiple:
+                value:
+                  entities: ["client.alice","client.bob"]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/users"
+        "400":
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/status_400_bad_request'
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/status_401_unauthorized'
+        "403":
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/status_403_forbidden'
+        "404":
+          description: Not Found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/status_404_not_found'
+        "500":
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/status_500_internal_server_error'
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  schemas:
+    version:
+      type: object
+      allOf:
+      - $ref: '#/components/schemas/status_200_ok_single'
+      - type: object
+        properties:
+          data:
+            type: array
+            items:
+              $ref: '#/components/schemas/version_data'
+    version_data:
+      required:
+      - reference
+      - version
+      properties:
+        reference:
+          type: string
+          example: https://github.com/fabric-testbed/fabric_ceph
+        version:
+          type: string
+          example: 1.0.0
+      example: null
+    status_200_ok_single:
+      type: object
+      properties:
+        size:
+          type: integer
+          default: 1
+        status:
+          type: integer
+          default: 200
+        type:
+          type: string
+    status_200_ok_no_content:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/status_200_ok_no_content_data'
+        type:
+          type: string
+          default: no_content
+        size:
+          type: integer
+          default: 1
+        status:
+          type: integer
+          default: 200
+    status_200_ok_paginated:
+      type: object
+      properties:
+        limit:
+          type: integer
+        offset:
+          type: integer
+        size:
+          type: integer
+        status:
+          type: integer
+          default: 200
+        total:
+          type: integer
+        type:
+          type: string
+    status_400_bad_request:
+      type: object
+      properties:
+        errors:
+          type: array
+          items:
+            $ref: '#/components/schemas/status_400_bad_request_errors'
+    status_401_unauthorized:
+      type: object
+      properties:
+        errors:
+          type: array
+          items:
+            $ref: '#/components/schemas/status_401_unauthorized_errors'
+        type:
+          type: string
+          default: error
+        size:
+          type: integer
+          default: 1
+        status:
+          type: integer
+          default: 401
+    status_403_forbidden:
+      type: object
+      properties:
+        errors:
+          type: array
+          items:
+            $ref: '#/components/schemas/status_403_forbidden_errors'
+        type:
+          type: string
+          default: error
+        size:
+          type: integer
+          default: 1
+        status:
+          type: integer
+          default: 403
+    status_404_not_found:
+      type: object
+      properties:
+        errors:
+          type: array
+          items:
+            $ref: '#/components/schemas/status_404_not_found_errors'
+        type:
+          type: string
+          default: error
+        size:
+          type: integer
+          default: 1
+        status:
+          type: integer
+          default: 404
+    status_500_internal_server_error:
+      type: object
+      properties:
+        errors:
+          type: array
+          items:
+            $ref: '#/components/schemas/status_500_internal_server_error_errors'
+        type:
+          type: string
+          default: error
+        size:
+          type: integer
+          default: 1
+        status:
+          type: integer
+          default: 500
+    status_200_ok_no_content_data:
+      type: object
+      properties:
+        message:
+          type: string
+          default: No Content
+        details:
+          type: string
+      example:
+        details: details
+        message: No Content
+    status_400_bad_request_errors:
+      type: object
+      properties:
+        message:
+          type: string
+          default: Bad Request
+        details:
+          type: string
+        type:
+          type: string
+          default: error
+        size:
+          type: integer
+          default: 1
+        status:
+          type: integer
+          default: 400
+      example: null
+    status_401_unauthorized_errors:
+      type: object
+      properties:
+        message:
+          type: string
+          default: Unauthorized
+        details:
+          type: string
+      example: null
+    status_403_forbidden_errors:
+      type: object
+      properties:
+        message:
+          type: string
+          default: Forbidden
+        details:
+          type: string
+      example: null
+    status_404_not_found_errors:
+      type: object
+      properties:
+        message:
+          type: string
+          default: Not Found
+        details:
+          type: string
+      example: null
+    status_500_internal_server_error_errors:
+      type: object
+      properties:
+        message:
+          type: string
+          default: Internal Server Error
+        details:
+          type: string
+      example: null
+
+
+    Capability:
+      type: object
+      required: [entity, cap]
+      properties:
+        entity:
+          type: string
+          description: One of mon|osd|mds|mgr (commonly mon/osd/mds)
+          example: mds
+        cap:
+          type: string
+          description: Capability string, e.g. `allow rw`, `allow r fsname=CEPH-FS-01 path=/volumes/_nogroup/demo`
+          example: "allow rw"
+
+    CreateOrUpdateUserRequest:
+      type: object
+      required: [user_entity, capabilities]
+      properties:
+        user_entity:
+          type: string
+          description: CephX entity name (e.g., `client.demo`)
+          example: client.demo
+        capabilities:
+          type: array
+          items:
+            $ref: '#/components/schemas/Capability'
+
+    users:
+      type: object
+      allOf:
+      - $ref: '#/components/schemas/status_200_ok_paginated'
+      - type: object
+        properties:
+          data:
+            type: array
+            items:
+              $ref: '#/components/schemas/CephUser'
+
+    CephUser:
+      type: object
+      properties:
+        user_entity:
+          type: string
+          example: client.demo
+        capabilities:
+          type: array
+          items:
+            $ref: '#/components/schemas/Capability'
+        # Implementations sometimes include keys or metadata; keep it open-ended
+        keys:
+          type: array
+          items:
+            type: object
+          nullable: true
+        metadata:
+          type: object
+          additionalProperties: true
+          nullable: true
+
+    ExportUsersRequest:
+      type: object
+      required: [entities]
+      properties:
+        entities:
+          type: array
+          description: List of CephX entities to export
+          items:
+            type: string
+          example: ["client.demo","client.alice"]
+
+    SubvolumeGroupCreateRequest:
+      type: object
+      required: [vol_name, group_name]
+      properties:
+        vol_name:
+          type: string
+          description: CephFS volume name (filesystem), e.g. `CEPH-FS-01`
+        group_name:
+          type: string
+          description: Subvolume group name
+      example:
+        vol_name: CEPH-FS-01
+        group_name: fabric_staff
+
+    SubvolumeCreateOrResizeRequest:
+      type: object
+      required: [subvol_name]
+      properties:
+        subvol_name:
+          type: string
+          description: Subvolume name to create or resize
+        group_name:
+          type: string
+          description: Optional subvolume group name
+        size:
+          type: integer
+          format: int64
+          description: >
+            Quota in **bytes**. Omit to create without quota (unlimited).
+            Send a value to set or resize quota.
+          example: 10737418240
+        mode:
+          type: string
+          description: >
+            POSIX mode string for initial create (octal), e.g. `"0777"`. Ignored on resize.
+          pattern: "^[0-7]{3,4}$"
+          example: "0777"
+
+    SubvolumeInfo:
+      type: object
+      additionalProperties: true
+      properties:
+        path:
+          type: string
+          description: Absolute CephFS path to the subvolume (use for mounting)
+        bytes_quota:
+          type: integer
+          format: int64
+        mode:
+          type: string
+          example: "0777"
+        state:
+          type: string
+          example: complete
+        created_at:
+          type: string
+          format: date-time
+
+    SubvolumeExists:
+      type: object
+      properties:
+        exists:
+          type: boolean
+      example:
+        exists: true

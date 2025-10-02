@@ -1,0 +1,56 @@
+cluster:
+  europe:
+    ceph_cli: ceph
+    default_fs: CEPH-FS-01
+    dashboard:
+      endpoints:
+        - https://10.145.126.2:8443  # Use the same IP for SSH
+      user: admin
+      password: abcd1234
+      ssh_user: rocky
+      ssh_key: ~/.ssh/id_rsa_ceph
+    rgw_admin:
+      endpoints:
+        - http://10.145.124.2:8080
+      admin_access_key: admin_ak
+      admin_secret_key: admin_sk
+      ssh_user: rocky
+      ssh_key: ~/.ssh/id_rsa_ceph
+
+runtime:
+  service_project: 6b8dd6eb-4b2b-4656-b3ee-ce61f91a12b4
+  port: 3500
+
+logging:
+  ## The directory in which actor should create log files.
+  ## This directory will be automatically created if it does not exist.
+  log-directory: logs #/var/log/ceph-mgr
+
+  ## The filename to be used for actor's log file.
+  log-file: ceph.log
+
+  ## The filename to be used for metrics log file.
+  metrics-log-file: metrics.log
+
+  ## The default log level for actor.
+  log-level: INFO
+
+  ## actor rotates log files. You may specify how many archived log files to keep here.
+  log-retain: 5
+
+  ## actor rotates log files after they exceed a certain size.
+  ## You may specify the file size that results in a log file being rotated here.
+  log-size: 5000000
+
+  logger: ceph-mgr
+
+oauth:
+  jwks-url: https://cm.fabric-testbed.net/credmgr/certs
+  # Uses HH:MM:SS (less than 24 hours)
+  key-refresh: 00:10:00
+  verify-exp: True
+
+core_api:
+  enable: True
+  host: https://uis.fabric-testbed.net
+  token:

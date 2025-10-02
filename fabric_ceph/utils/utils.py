@@ -24,15 +24,17 @@
 #
 # Author: Komal Thareja (kthare10@renci.org)
 from http.client import BAD_REQUEST, UNAUTHORIZED, FORBIDDEN, NOT_FOUND
-from typing import Union
+from typing import Union, List, Tuple
 
 import connexion
-from flask import Response
+from flask import Response, request
 
+from fabric_ceph.common.config import Config
 from fabric_ceph.common.globals import get_globals
 from fabric_ceph.response.ceph_exception import CephException
 from fabric_ceph.response.cors_response import cors_401, cors_400, cors_403, cors_404, cors_500, cors_200, cors_response
 from fabric_ceph.security.fabric_token import FabricToken
+from fabric_ceph.utils.dash_client import DashClient
 
 
 def get_token() -> str:
@@ -75,3 +77,18 @@ def cors_error_response(error: Union[CephException, Exception]) -> Response:
 def cors_success_response(response_body) -> Response:
     return cors_200(response_body=response_body)
 
+
+def ordered_cluster_names(cfg: Config) -> List[str]:
+    """
+    If the client provides X-Cluster: a,b,c we try those in that order.
+    Otherwise we try all configured clusters in config order.
+    """
+    hdr = (request.headers.get("X-Cluster") or "").strip()
+    if not hdr:
+        return list(cfg.cluster.keys())
+    wanted = [x.strip() for x in hdr.split(",") if x.strip()]
+    return [n for n in wanted if n in cfg.cluster] or list(cfg.cluster.keys())
+
+
+def build_clients(cfg: Config, names: List[str]) -> List[Tuple[str, DashClient]]:
+    return [(name, DashClient.for_cluster(name, cfg.cluster[name])) for name in names]

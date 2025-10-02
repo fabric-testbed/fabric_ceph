@@ -20,10 +20,282 @@ servers:
         default: "8443"
 
 tags:
-  - name: Auth
   - name: Cluster User
+  - name: CephFS
+  - name: version
 
 paths:
+
+  /cephfs/subvolume/{vol_name}:
+    put:
+      tags: [CephFS]
+      summary: Create or resize a subvolume
+      description: >
+        Creates a new subvolume (if it does not exist) or resizes an existing one.
+        Omit `size` to create without a quota (unlimited). Send `size` (bytes) to set/resize the quota.
+      operationId: createOrResizeSubvolume
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: vol_name
+          required: true
+          schema:
+            type: string
+          description: CephFS volume name (filesystem), e.g. `CEPH-FS-01`
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SubvolumeCreateOrResizeRequest'
+            examples:
+              createNoQuota:
+                value:
+                  subvol_name: alice
+                  group_name: fabric_staff
+                  mode: "0777"
+              createWithQuota:
+                value:
+                  subvol_name: bob
+                  group_name: fabric_staff
+                  size: 10737418240
+                  mode: "0770"
+              resize:
+                value:
+                  subvol_name: bob
+                  group_name: fabric_staff
+                  size: 536870912
+      responses:
+        "200":
+          description: OK (created or resized)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/status_200_ok_no_content'
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/status_200_ok_no_content'
+        "400":
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/status_400_bad_request'
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/status_401_unauthorized'
+        "403":
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/status_403_forbidden'
+        "404":
+          description: Not Found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/status_404_not_found'
+        "500":
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/status_500_internal_server_error'
+
+    delete:
+      tags: [CephFS]
+      summary: Delete a subvolume
+      operationId: deleteSubvolume
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: vol_name
+          required: true
+          schema:
+            type: string
+          description: CephFS volume name (filesystem)
+        - in: query
+          name: subvol_name
+          required: true
+          schema:
+            type: string
+        - in: query
+          name: group_name
+          required: false
+          schema:
+            type: string
+        - in: query
+          name: force
+          required: false
+          schema:
+            type: boolean
+            default: false
+          description: Force delete even if snapshots exist (behavior depends on cluster policy)
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/status_200_ok_no_content'
+        "400":
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/status_400_bad_request'
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/status_401_unauthorized'
+        "403":
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/status_403_forbidden'
+        "404":
+          description: Not Found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/status_404_not_found'
+        "500":
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/status_500_internal_server_error'
+
+  /cephfs/subvolume/{vol_name}/info:
+    get:
+      tags: [CephFS]
+      summary: Get subvolume info (path)
+      description: Returns subvolume details; use the `path` field as the mount path (equivalent to `getpath`).
+      operationId: getSubvolumeInfo
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: vol_name
+          required: true
+          schema:
+            type: string
+          description: CephFS volume name (filesystem)
+        - in: query
+          name: subvol_name
+          required: true
+          schema:
+            type: string
+        - in: query
+          name: group_name
+          required: false
+          schema:
+            type: string
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SubvolumeInfo'
+        "400":
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/status_400_bad_request'
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/status_401_unauthorized'
+        "403":
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/status_403_forbidden'
+        "404":
+          description: Not Found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/status_404_not_found'
+        "500":
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/status_500_internal_server_error'
+
+  /cephfs/subvolume/{vol_name}/exists:
+    get:
+      tags: [CephFS]
+      summary: Check whether a subvolume exists
+      operationId: subvolumeExists
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: vol_name
+          required: true
+          schema:
+            type: string
+        - in: query
+          name: subvol_name
+          required: true
+          schema:
+            type: string
+        - in: query
+          name: group_name
+          required: false
+          schema:
+            type: string
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SubvolumeExists'
+        "400":
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/status_400_bad_request'
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/status_401_unauthorized'
+        "403":
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/status_403_forbidden'
+        "500":
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/status_500_internal_server_error'
+
   /version:
     get:
       tags:
@@ -119,7 +391,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/status_200_ok_no_content'
+                $ref: "#/components/schemas/users"
         "400":
           description: Bad Request
           content:
@@ -169,7 +441,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/status_200_ok_no_content'
+                $ref: "#/components/schemas/users"
         "400":
           description: Bad Request
           content:
@@ -274,20 +546,12 @@ paths:
                 value:
                   entities: ["client.alice","client.bob"]
       responses:
-        '200':
-          description: Keyring text payload
+        "200":
+          description: OK
           content:
-            text/plain:
-              schema:
-                type: string
             application/json:
               schema:
-                oneOf:
-                  - type: object
-                    properties:
-                      keyring:
-                        type: string
-                  - type: string
+                $ref: "#/components/schemas/users"
         "400":
           description: Bad Request
           content:
@@ -318,8 +582,6 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/status_500_internal_server_error'
-      x-accepts:
-        - application/vnd.ceph.api.v1.0+json
 
 components:
   securitySchemes:
@@ -530,16 +792,7 @@ components:
         details:
           type: string
       example: null
-    metrics:
-      type: object
-      allOf:
-      - $ref: '#/components/schemas/status_200_ok_single'
-      - type: object
-        properties:
-          results:
-            type: array
-            items:
-              type: object
+
 
     Capability:
       type: object
@@ -610,18 +863,68 @@ components:
             type: string
           example: ["client.demo","client.alice"]
 
-    keyrings:
+    SubvolumeGroupCreateRequest:
       type: object
-      allOf:
-      - $ref: '#/components/schemas/status_200_ok_paginated'
-      - type: object
-        properties:
-          data:
-            type: array
-            items:
-                oneOf:
-                  - type: object
-                    properties:
-                      keyring:
-                        type: string
-                  - type: string
+      required: [vol_name, group_name]
+      properties:
+        vol_name:
+          type: string
+          description: CephFS volume name (filesystem), e.g. `CEPH-FS-01`
+        group_name:
+          type: string
+          description: Subvolume group name
+      example:
+        vol_name: CEPH-FS-01
+        group_name: fabric_staff
+
+    SubvolumeCreateOrResizeRequest:
+      type: object
+      required: [subvol_name]
+      properties:
+        subvol_name:
+          type: string
+          description: Subvolume name to create or resize
+        group_name:
+          type: string
+          description: Optional subvolume group name
+        size:
+          type: integer
+          format: int64
+          description: >
+            Quota in **bytes**. Omit to create without quota (unlimited).
+            Send a value to set or resize quota.
+          example: 10737418240
+        mode:
+          type: string
+          description: >
+            POSIX mode string for initial create (octal), e.g. `"0777"`. Ignored on resize.
+          pattern: "^[0-7]{3,4}$"
+          example: "0777"
+
+    SubvolumeInfo:
+      type: object
+      additionalProperties: true
+      properties:
+        path:
+          type: string
+          description: Absolute CephFS path to the subvolume (use for mounting)
+        bytes_quota:
+          type: integer
+          format: int64
+        mode:
+          type: string
+          example: "0777"
+        state:
+          type: string
+          example: complete
+        created_at:
+          type: string
+          format: date-time
+
+    SubvolumeExists:
+      type: object
+      properties:
+        exists:
+          type: boolean
+      example:
+        exists: true

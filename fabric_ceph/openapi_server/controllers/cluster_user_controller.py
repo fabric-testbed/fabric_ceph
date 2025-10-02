@@ -1,7 +1,4 @@
-import connexion
-
-import fabric_ceph.response.cluster_user_controller as rc
-from fabric_ceph.openapi_server.models import CreateOrUpdateUserRequest
+from fabric_ceph.response import cluster_user_controller as rc
 
 
 def create_user(body):  # noqa: E501
@@ -9,10 +6,10 @@ def create_user(body):  # noqa: E501
 
      # noqa: E501
 
-    :param create_or_update_user_request:
+    :param create_or_update_user_request: 
     :type create_or_update_user_request: dict | bytes
 
-    :rtype: Union[Status200OkNoContent, Tuple[Status200OkNoContent, int], Tuple[Status200OkNoContent, int, Dict[str, str]]
+    :rtype: Union[Users, Tuple[Users, int], Tuple[Users, int, Dict[str, str]]
     """
     return rc.create_user(body=body)
 
@@ -35,10 +32,10 @@ def export_users(body):  # noqa: E501
 
      # noqa: E501
 
-    :param export_users_request:
+    :param export_users_request: 
     :type export_users_request: dict | bytes
 
-    :rtype: Union[str, Tuple[str, int], Tuple[str, int, Dict[str, str]]
+    :rtype: Union[Users, Tuple[Users, int], Tuple[Users, int, Dict[str, str]]
     """
     return rc.export_users(body=body)
 
@@ -59,9 +56,9 @@ def update_user(body):  # noqa: E501
 
      # noqa: E501
 
-    :param create_or_update_user_request:
+    :param create_or_update_user_request: 
     :type create_or_update_user_request: dict | bytes
 
-    :rtype: Union[Status200OkNoContent, Tuple[Status200OkNoContent, int], Tuple[Status200OkNoContent, int, Dict[str, str]]
+    :rtype: Union[Users, Tuple[Users, int], Tuple[Users, int, Dict[str, str]]
     """
     return rc.update_user(body=body)

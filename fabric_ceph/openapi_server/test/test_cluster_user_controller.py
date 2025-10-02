@@ -3,7 +3,6 @@ import unittest
 from flask import json
 
 from fabric_ceph.openapi_server.models.create_or_update_user_request import CreateOrUpdateUserRequest  # noqa: E501
-from fabric_ceph.openapi_server.models.export_users200_response import ExportUsers200Response  # noqa: E501
 from fabric_ceph.openapi_server.models.export_users_request import ExportUsersRequest  # noqa: E501
 from fabric_ceph.openapi_server.models.status200_ok_no_content import Status200OkNoContent  # noqa: E501
 from fabric_ceph.openapi_server.models.status400_bad_request import Status400BadRequest  # noqa: E501

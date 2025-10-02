@@ -1,4 +1,5 @@
-import fabric_ceph.response.security_controller as rc
+from typing import List
+
 
 def info_from_bearerAuth(token):
     """
@@ -11,5 +12,5 @@ def info_from_bearerAuth(token):
     :return: Decoded token information or None if token is invalid
     :rtype: dict | None
     """
-    return rc.info_from_bearerAuth(token=token)
+    return {'uid': 'user_id'}
 

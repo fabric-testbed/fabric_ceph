@@ -145,13 +145,13 @@ def ensure_subvolume_across_clusters(
             if exists:
                 # resize if quota specified; otherwise no-op "ok"
                 if size_bytes is not None and int(size_bytes) >= 0:
-                    dc.create_or_resize_subvolume(fs_name, subvol_name, group_name, size_bytes=size_bytes)
+                    dc.resize_subvolume(fs_name, subvol_name, group_name, size_bytes=size_bytes)
                     applied[name] = "resized"
                 else:
                     applied[name] = "ok"
             else:
                 # create; pass mode if provided; omit size to create unlimited
-                dc.create_or_resize_subvolume(
+                dc.create_subvolume(
                     fs_name, subvol_name, group_name, size_bytes=size_bytes, mode=mode
                 )
                 applied[name] = "created"

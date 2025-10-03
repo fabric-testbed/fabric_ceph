@@ -28,6 +28,7 @@ from typing import Dict, List, Optional, Tuple
 
 from fabric_ceph.common.config import Config
 from fabric_ceph.utils.dash_client import DashClient
+from fabric_ceph.utils.keyring_parser import extract_key_from_keyring
 
 
 def list_users_first_success(
@@ -64,6 +65,7 @@ def list_users_first_success(
 def export_users_first_success(
     cfg: Config,
     entities: List[str],
+    keyring_only: bool,
 ) -> Dict[str, object]:
     """
     Try to export the keyring(s) for 'entities' from each cluster in order,
@@ -97,6 +99,12 @@ def export_users_first_success(
         try:
             exported_entities = {}
             for ent in entities:
+                keyring = dc.export_keyring(ent)
+                if keyring_only:
+                    key = extract_key_from_keyring(keyring, ent) or ""
+                    if not key:
+                        raise RuntimeError("key not found in exported keyring")
+                    exported_entities[ent] = key
                 exported_entities[ent] = dc.export_keyring(ent)
 
             result[name] = exported_entities

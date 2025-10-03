@@ -146,6 +146,7 @@ def export_users(body):  # noqa: E501
     globals = get_globals()
     log = globals.log
     log.debug("Processing CephX export request")
+    keyring_only = True
 
     try:
         fabric_token, is_operator, bastion_login = authorize()
@@ -155,8 +156,12 @@ def export_users(body):  # noqa: E501
         if len(export_users_request.entities) > 1 and not is_operator:
             return cors_401(details=f"{fabric_token.uuid}/{fabric_token.email} is not authorized!")
 
+        if is_operator:
+            keyring_only = False
+
         cfg = globals.config
-        clusters = export_users_first_success(cfg=cfg, entities=export_users_request.entities)
+        clusters = export_users_first_success(cfg=cfg, entities=export_users_request.entities,
+                                              keyring_only=keyring_only)
         log.debug(f"Exported CephX users: {clusters}")
 
         response = ExportUsersResponse()

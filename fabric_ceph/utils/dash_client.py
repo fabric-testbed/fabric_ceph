@@ -253,7 +253,7 @@ class DashClient:
         DELETE /cephfs/subvolume/{vol_name}?subvol_name=&group_name=&force=
         """
         url = f"{self.base_api}/cephfs/subvolume/{fs_name}"
-        params = {"subvol_name": subvol_name, "force": str(bool(force)).lower()}
+        params = {"subvol_name": subvol_name}
         if group_name:
             params["group_name"] = group_name
         r = requests.delete(url, headers=self._hdrs(), params=params, timeout=60, verify=self.verify_tls)

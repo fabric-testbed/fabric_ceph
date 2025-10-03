@@ -49,7 +49,7 @@ def list_users_first_success(
                                       for name, entry in cfg.cluster.items()}
 
     errors: Dict[str, str] = {}
-    for name, dc in clients.values():
+    for name, dc in clients.items():
         try:
             users = dc.list_users()
             return {"cluster": name, "users": users}
@@ -88,7 +88,7 @@ def export_users_first_success(
     clients: Dict[str, DashClient] = {name: DashClient.for_cluster(name, entry)
                                       for name, entry in cfg.cluster.items()}
 
-    for name, dc in clients:
+    for name, dc in clients.items():
         try:
             # Prefer a multi-entity export if your DashClient supports it
             keyring_text: Optional[str] = None

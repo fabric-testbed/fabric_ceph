@@ -10,7 +10,7 @@ werkzeug == 0.16.1; python_version=="3.5" or python_version=="3.4"
 swagger-ui-bundle >= 0.0.2
 python_dateutil >= 2.6.0
 setuptools >= 21.0.0
-Flask == 2.1.1
+Flask == 2.2.5
 waitress
 fabric_fss_utils>=1.6.0
 fabric_credmgr_client>=1.6.2

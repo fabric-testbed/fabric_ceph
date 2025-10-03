@@ -99,19 +99,26 @@ def export_users_first_success(
         try:
             exported_entities = {}
             for ent in entities:
-                keyring = dc.export_keyring(ent)
-                exported_entities[ent] = keyring
-                if keyring_only:
-                    logger.debug(f"Exported keyring {keyring}")
-                    key = keyring_minimal(keyring)
-                    if not key:
-                        raise RuntimeError("key not found in exported keyring")
-                    exported_entities[ent] = key
+                try:
+                    keyring = dc.export_keyring(ent)
+                    exported_entities[ent] = keyring
+                    if keyring_only:
+                        logger.debug(f"Exported keyring {keyring}")
+                        key = keyring_minimal(keyring)
+                        if not key:
+                            raise RuntimeError("key not found in exported keyring")
+                        exported_entities[ent] = key
+                except Exception as e:
+                    errors[name] = str(e)
 
             result[name] = exported_entities
-
         except Exception as e:
             logger.exception(f"Encountered exception while exporting users on {name}")
             errors[name] = str(e)
             continue
+
+    if len(errors) > 0 and len(result) == 0:
+        details = " ".join(f"{k}:{v}" for k, v in errors.items())
+        raise ValueError("No users were exported: {}".format(details))
+
     return result

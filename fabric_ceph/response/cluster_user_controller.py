@@ -157,7 +157,7 @@ def export_users(body):  # noqa: E501
             return cors_401(details=f"{fabric_token.uuid}/{fabric_token.email} is not authorized!")
 
         if is_operator:
-            keyring_only = False
+            keyring_only = True
 
         cfg = globals.config
         clusters = export_users_first_success(cfg=cfg, entities=export_users_request.entities,

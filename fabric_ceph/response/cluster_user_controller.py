@@ -5,7 +5,7 @@ import connexion
 from fabric_ceph.common.globals import get_globals
 from fabric_ceph.openapi_server.models import Users, CephUser, Status200OkNoContent
 from fabric_ceph.openapi_server.models.export_users_request import ExportUsersRequest  # noqa: E501
-from fabric_ceph.response.cors_response import cors_401, cors_400
+from fabric_ceph.response.cors_response import cors_401, cors_400, cors_500
 from fabric_ceph.utils.utils import cors_success_response, cors_error_response, authorize
 from fabric_ceph.utils.create_ceph_user import ensure_user_across_clusters_with_cluster_paths
 from fabric_ceph.utils.delete_ceph_user import delete_user_across_clusters
@@ -51,10 +51,12 @@ def apply_user_templated(body: Dict, x_cluster=None):  # operationId: applyUserT
             preferred_source=preferred,
         )
 
-        # If you also want to return resolved paths, you can augment
-        # ensure_user_across_clusters_with_cluster_paths to include them, or
-        # call your CephFS info function per cluster.
-        # Assume your helper returns "caps_applied", "errors", "imported_to", etc.
+        errors: dict = (summary.get("errors") or {})
+        any_error = bool(errors)
+        if any_error:
+            details = " ".join(f"{k}:{v}" for k, v in errors.items())
+            return cors_500(details=details)
+
 
         # 200 OK with ApplyUserResponse schema
         return cors_success_response(response_body={
@@ -99,6 +101,12 @@ def delete_user(entity):  # noqa: E501
         cfg = globals.config
         result = delete_user_across_clusters(cfg=cfg, user_entity=entity)
         log.debug(f"Deleted CephX user: {entity} {result}")
+
+        errors: dict = (result.get("errors") or {})
+        any_error = bool(errors)
+        if any_error:
+            details = " ".join(f"{k}:{v}" for k, v in errors.items())
+            return cors_500(details=details)
 
         response = Status200OkNoContent()
         response.data = [result]

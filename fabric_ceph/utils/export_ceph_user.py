@@ -100,13 +100,13 @@ def export_users_first_success(
             exported_entities = {}
             for ent in entities:
                 keyring = dc.export_keyring(ent)
+                exported_entities[ent] = keyring
                 if keyring_only:
                     logger.debug(f"Exported keyring {keyring}")
                     key = keyring_minimal(keyring)
                     if not key:
                         raise RuntimeError("key not found in exported keyring")
                     exported_entities[ent] = key
-                exported_entities[ent] = dc.export_keyring(ent)
 
             result[name] = exported_entities
 

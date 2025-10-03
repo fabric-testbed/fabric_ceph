@@ -3,7 +3,8 @@ from typing import Dict
 import connexion
 
 from fabric_ceph.common.globals import get_globals
-from fabric_ceph.openapi_server.models import Users, CephUser, Status200OkNoContentData, Status200OkNoContent
+from fabric_ceph.openapi_server.models import Users, CephUser, Status200OkNoContentData, Status200OkNoContent, \
+    ApplyUserResponse
 from fabric_ceph.openapi_server.models.export_users_request import ExportUsersRequest  # noqa: E501
 from fabric_ceph.response.cors_response import cors_401, cors_400, cors_500, cors_200
 from fabric_ceph.utils.utils import cors_success_response, cors_error_response, authorize
@@ -64,7 +65,7 @@ def apply_user_templated(body: Dict, x_cluster=None):  # operationId: applyUserT
 
         log.debug("Successfully applied templated user")
         # 200 OK with ApplyUserResponse schema
-        return cors_success_response(response_body={
+        response = ApplyUserResponse.from_dict({
             "user_entity": user_entity,
             "fs_name": render["fs_name"],
             "subvol_name": render["subvol_name"],
@@ -78,6 +79,7 @@ def apply_user_templated(body: Dict, x_cluster=None):  # operationId: applyUserT
             "paths": summary.get("paths", {}),
             "errors": summary.get("errors", {}),
         })
+        return cors_success_response(response_body=response)
 
     except Exception as e:
         g.log.exception(e)

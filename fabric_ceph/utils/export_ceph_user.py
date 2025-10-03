@@ -28,7 +28,7 @@ from typing import Dict, List, Optional, Tuple
 
 from fabric_ceph.common.config import Config
 from fabric_ceph.utils.dash_client import DashClient
-from fabric_ceph.utils.keyring_parser import extract_key_from_keyring, keyring_minimal
+from fabric_ceph.utils.keyring_parser import keyring_minimal
 
 
 def list_users_first_success(

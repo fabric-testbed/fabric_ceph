@@ -47,7 +47,7 @@ def create_or_resize_subvolume(vol_name, body):  # noqa: E501
                                                   subvol_name=subvolume_create_or_resize_request.subvol_name,
                                                   group_name=subvolume_create_or_resize_request.group_name,
                                                   size_bytes=subvolume_create_or_resize_request.size,  # 10 GiB; or None/0 for unlimited
-                                                  mode=body.mode,  # used only on create, safe to pass always
+                                                  mode=subvolume_create_or_resize_request.mode,  # used only on create, safe to pass always
                                                   #preferred_source="europe",
                                                   # optional
                                                   )

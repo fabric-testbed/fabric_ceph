@@ -31,6 +31,7 @@ services:
     volumes:
       - ./fabric_ceph/config.yml:/etc/fabric/ceph/config/config.yml
       - ./logs/:/var/log/ceph-mgr
+      - ~/.ssh:/root/.ssh
 #networks:
 #  frontend:
 #  backend:

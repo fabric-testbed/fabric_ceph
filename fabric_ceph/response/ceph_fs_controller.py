@@ -141,7 +141,7 @@ def get_subvolume_info(vol_name, subvol_name, group_name=None):  # noqa: E501
     log = g.log
     try:
         fabric_token, is_operator, bastion_login = authorize()
-        if vol_name.lower() != bastion_login.lower():
+        if not is_operator and subvol_name.lower() != bastion_login.lower():
             return cors_401(details=f"{fabric_token.uuid}/{fabric_token.email} is not authorized to access {vol_name}!")
 
         cfg: Config = g.config

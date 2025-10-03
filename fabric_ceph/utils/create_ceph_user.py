@@ -25,6 +25,7 @@
 # Author: Komal Thareja (kthare10@renci.org)
 from __future__ import annotations
 
+import logging
 import os
 from dataclasses import dataclass
 from typing import Dict, List, Optional, Tuple
@@ -115,6 +116,7 @@ def ensure_user_across_clusters_with_cluster_paths(
         {"entity":"osd","cap":"allow rw tag cephfs metadata={fs}"}
       ]
     """
+    log = logging.getLogger(cfg.logging.logger)
     # build clients (stable order)
     clients: Dict[str, DashClient] = {name: DashClient.for_cluster(name, entry)
                                       for name, entry in cfg.cluster.items()}
@@ -128,6 +130,7 @@ def ensure_user_across_clusters_with_cluster_paths(
                 source_name = name
                 break
         except Exception:
+            log.exception(f"Failed to resolve {user_entity} for cluster {name}")
             continue
     if source_name is None:
         source_name = preferred_source if (preferred_source in clients if preferred_source else False) else next(iter(clients.keys()))
@@ -152,6 +155,7 @@ def ensure_user_across_clusters_with_cluster_paths(
             updated_on_source = True
         caps_applied[source_name] = caps_src
     except Exception as e:
+        log.exception(f"source update/create failed: {e}")
         errors[source_name] = f"source update/create failed: {e}"
         # If we cannot even set up the source, abort early
         return UserCapsSyncResult(
@@ -165,6 +169,7 @@ def ensure_user_across_clusters_with_cluster_paths(
         keyring = dc_source.export_keyring(user_entity)
         keyring_bytes = keyring.encode("utf-8")
     except Exception as e:
+        log.exception(f"export keyring failed: {e}")
         errors[source_name] = f"export failed: {e}"
         keyring_bytes = None  # we'll still try to proceed per-cluster with updates, but secrets may diverge
 
@@ -196,6 +201,7 @@ def ensure_user_across_clusters_with_cluster_paths(
             _ = dc.update_user_caps(user_entity, caps_here)
 
         except Exception as e:
+            log.exception(f"import user and update_user_caps failed: {e}")
             errors[name] = str(e)
             continue
 

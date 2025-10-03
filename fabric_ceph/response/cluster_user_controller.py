@@ -5,7 +5,7 @@ import connexion
 from fabric_ceph.common.globals import get_globals
 from fabric_ceph.openapi_server.models import Users, CephUser, Status200OkNoContentData, Status200OkNoContent
 from fabric_ceph.openapi_server.models.export_users_request import ExportUsersRequest  # noqa: E501
-from fabric_ceph.response.cors_response import cors_401, cors_400, cors_500
+from fabric_ceph.response.cors_response import cors_401, cors_400, cors_500, cors_200
 from fabric_ceph.utils.utils import cors_success_response, cors_error_response, authorize
 from fabric_ceph.utils.create_ceph_user import ensure_user_across_clusters_with_cluster_paths
 from fabric_ceph.utils.delete_ceph_user import delete_user_across_clusters
@@ -16,8 +16,10 @@ def apply_user_templated(body: Dict, x_cluster=None):  # operationId: applyUserT
     g = get_globals()
     log = g.log
     try:
+        log.debug("Applying user templated")
         fabric_token, is_operator, bastion_login = authorize()
         if not is_operator:
+            log.error(f"{fabric_token.uuid}/{fabric_token.email} is not authorized!")
             return cors_401(details=f"{fabric_token.uuid}/{fabric_token.email} is not authorized!")
 
         if connexion.request.is_json:
@@ -31,8 +33,10 @@ def apply_user_templated(body: Dict, x_cluster=None):  # operationId: applyUserT
 
         # Preconditions (fail fast with 400)
         if not tmpl_caps or not isinstance(tmpl_caps, list):
+            log.error("template_capabilities must be a non-empty list")
             return cors_400(details="template_capabilities must be a non-empty list")
         if not render or "fs_name" not in render or "subvol_name" not in render:
+            log.error("render.fs_name and render.subvol_name are required")
             return cors_400(details="render.fs_name and render.subvol_name are required")
 
         cfg = g.config
@@ -54,9 +58,11 @@ def apply_user_templated(body: Dict, x_cluster=None):  # operationId: applyUserT
         any_error = bool(errors)
         if any_error:
             details = " ".join(f"{k}:{v}" for k, v in errors.items())
+            log.error(f"Failed to apply templated error: {details}")
             return cors_500(details=details)
 
 
+        log.debug("Successfully applied templated user")
         # 200 OK with ApplyUserResponse schema
         return cors_success_response(response_body={
             "user_entity": user_entity,
@@ -194,7 +200,7 @@ def list_users():  # noqa: E501
         response.size = len(response.data)
         response.status = 200
         response.type = 'no_content'
-        return cors_success_response(response_body=response)
+        return cors_200(response_body=response)
     except Exception as e:
         log.exception(f"Failed processing CephX list request: {e}")
         return cors_error_response(error=e)

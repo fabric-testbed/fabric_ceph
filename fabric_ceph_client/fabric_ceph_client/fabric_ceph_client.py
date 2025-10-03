@@ -268,12 +268,6 @@ class CephManagerClient:
         return str(res)
 
     # --------------------- CephFS (subvolumes) ---------------------
-
-    def create_subvolume_group(self, vol_name: str, group_name: str, *, x_cluster: Optional[str] = None) -> Dict[str, Any]:
-        """POST /cephfs/subvolume/group"""
-        payload = {"vol_name": vol_name, "group_name": group_name}
-        return self._request("POST", "/cephfs/subvolume/group", json=payload, x_cluster=x_cluster)
-
     def create_or_resize_subvolume(
         self,
         vol_name: str,

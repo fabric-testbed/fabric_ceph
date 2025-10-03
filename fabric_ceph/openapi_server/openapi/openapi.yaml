@@ -365,31 +365,53 @@ paths:
       - Cluster User
       x-openapi-router-controller: fabric_ceph.openapi_server.controllers.cluster_user_controller
     post:
-      operationId: create_user
+      description: |
+        Creates or updates a CephX user and synchronizes the SAME SECRET across all clusters. Capability strings may include placeholders `{fs}`, `{path}`, `{group}`, `{subvol}` which are rendered per cluster using subvolume info (getpath).
+      operationId: apply_user_templated
+      parameters:
+      - description: |
+          Optional cluster try-order/scope hint. Server still syncs to all configured clusters unless restricted by deployment policy.
+        explode: false
+        in: header
+        name: X-Cluster
+        required: false
+        schema:
+          example: "europe,lab"
+          type: string
+        style: simple
       requestBody:
         content:
           application/json:
             examples:
-              basic:
+              projectUser:
                 value:
-                  user_entity: client.demo
-                  capabilities:
+                  user_entity: client.project123
+                  template_capabilities:
                   - entity: mon
                     cap: allow r
-                  - entity: osd
-                    cap: allow rwx
                   - entity: mds
-                    cap: allow rw
+                    cap: "allow rw fsname={fs} path={path}"
+                  - entity: osd
+                    cap: "allow rw tag cephfs data={fs}"
+                  - entity: osd
+                    cap: "allow rw tag cephfs metadata={fs}"
+                  render:
+                    fs_name: CEPH-FS-01
+                    subvol_name: project123
+                    group_name: fabric_staff
+                  sync_across_clusters: true
+                  preferred_source: europe
             schema:
-              $ref: "#/components/schemas/CreateOrUpdateUserRequest"
+              $ref: "#/components/schemas/CreateUserTemplatedRequest"
         required: true
       responses:
         "200":
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/users"
-          description: OK
+                $ref: "#/components/schemas/ApplyUserResponse"
+          description: Summary of synchronization results and per-cluster applied
+            caps
         "400":
           content:
             application/json:
@@ -413,7 +435,7 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/status_404_not_found"
-          description: Not Found
+          description: "Not Found (e.g., subvolume missing)"
         "500":
           content:
             application/json:
@@ -422,58 +444,7 @@ paths:
           description: Internal Server Error
       security:
       - bearerAuth: []
-      summary: Create a CephX user (with capabilities)
-      tags:
-      - Cluster User
-      x-openapi-router-controller: fabric_ceph.openapi_server.controllers.cluster_user_controller
-    put:
-      operationId: update_user
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/CreateOrUpdateUserRequest"
-        required: true
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/users"
-          description: OK
-        "400":
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/status_400_bad_request"
-          description: Bad Request
-        "401":
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/status_401_unauthorized"
-          description: Unauthorized
-        "403":
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/status_403_forbidden"
-          description: Forbidden
-        "404":
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/status_404_not_found"
-          description: Not Found
-        "500":
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/status_500_internal_server_error"
-          description: Internal Server Error
-      security:
-      - bearerAuth: []
-      summary: Update/overwrite capabilities for a CephX user
+      summary: Upsert a CephX user with cluster-specific capabilities
       tags:
       - Cluster User
       x-openapi-router-controller: fabric_ceph.openapi_server.controllers.cluster_user_controller
@@ -981,29 +952,169 @@ components:
       - entity
       title: Capability
       type: object
-    CreateOrUpdateUserRequest:
+    CapabilityTemplate:
       example:
-        user_entity: client.demo
-        capabilities:
-        - cap: allow rw
+        cap: "allow rw fsname={fs} path={path}"
+        entity: mds
+      properties:
+        entity:
+          description: One of mon|osd|mds|mgr
+          example: mds
+          title: entity
+          type: string
+        cap:
+          example: "allow rw fsname={fs} path={path}"
+          title: cap
+          type: string
+      required:
+      - cap
+      - entity
+      title: CapabilityTemplate
+      type: object
+    CapRenderContext:
+      example:
+        subvol_name: project123
+        group_name: fabric_staff
+        fs_name: CEPH-FS-01
+      properties:
+        fs_name:
+          example: CEPH-FS-01
+          title: fs_name
+          type: string
+        subvol_name:
+          example: project123
+          title: subvol_name
+          type: string
+        group_name:
+          example: fabric_staff
+          nullable: true
+          title: group_name
+          type: string
+      required:
+      - fs_name
+      - subvol_name
+      title: CapRenderContext
+      type: object
+    CreateUserTemplatedRequest:
+      example:
+        user_entity: client.project123
+        preferred_source: europe
+        template_capabilities:
+        - cap: "allow rw fsname={fs} path={path}"
           entity: mds
-        - cap: allow rw
+        - cap: "allow rw fsname={fs} path={path}"
           entity: mds
+        render:
+          subvol_name: project123
+          group_name: fabric_staff
+          fs_name: CEPH-FS-01
+        sync_across_clusters: true
       properties:
         user_entity:
-          description: "CephX entity name (e.g., `client.demo`)"
-          example: client.demo
+          example: client.project123
           title: user_entity
           type: string
-        capabilities:
+        template_capabilities:
           items:
-            $ref: "#/components/schemas/Capability"
-          title: capabilities
+            $ref: "#/components/schemas/CapabilityTemplate"
+          title: template_capabilities
           type: array
+        render:
+          $ref: "#/components/schemas/CapRenderContext"
+        sync_across_clusters:
+          default: true
+          description: |
+            If true, export key from a source cluster and import to others so the same secret is used everywhere; then overwrite caps on each cluster with its rendered (path-aware) caps.
+          title: sync_across_clusters
+          type: boolean
+        preferred_source:
+          description: Preferred source cluster when user doesn't already exist.
+          example: europe
+          nullable: true
+          title: preferred_source
+          type: string
       required:
-      - capabilities
+      - render
+      - template_capabilities
       - user_entity
-      title: CreateOrUpdateUserRequest
+      title: CreateUserTemplatedRequest
+      type: object
+    ApplyUserResponse:
+      example:
+        user_entity: client.project123
+        subvol_name: project123
+        group_name: group_name
+        paths:
+          key: paths
+        fs_name: CEPH-FS-01
+        imported_to:
+        - imported_to
+        - imported_to
+        updated_on_source: true
+        source_cluster: europe
+        created_on_source: true
+        caps_applied:
+          key:
+          - cap: allow rw
+            entity: mds
+          - cap: allow rw
+            entity: mds
+        errors:
+          key: errors
+      properties:
+        user_entity:
+          example: client.project123
+          title: user_entity
+          type: string
+        fs_name:
+          example: CEPH-FS-01
+          title: fs_name
+          type: string
+        subvol_name:
+          example: project123
+          title: subvol_name
+          type: string
+        group_name:
+          nullable: true
+          title: group_name
+          type: string
+        source_cluster:
+          example: europe
+          title: source_cluster
+          type: string
+        created_on_source:
+          title: created_on_source
+          type: boolean
+        updated_on_source:
+          title: updated_on_source
+          type: boolean
+        imported_to:
+          description: Clusters where the keyring was imported
+          items:
+            type: string
+          title: imported_to
+          type: array
+        caps_applied:
+          additionalProperties:
+            items:
+              $ref: "#/components/schemas/Capability"
+            type: array
+          description: Map cluster -> rendered caps actually applied
+          title: caps_applied
+          type: object
+        paths:
+          additionalProperties:
+            type: string
+          description: Map cluster -> resolved subvolume path
+          title: paths
+          type: object
+        errors:
+          additionalProperties:
+            type: string
+          description: Map cluster -> error string (if any)
+          title: errors
+          type: object
+      title: ApplyUserResponse
       type: object
     users:
       allOf:

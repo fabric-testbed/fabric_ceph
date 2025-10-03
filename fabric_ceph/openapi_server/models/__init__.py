@@ -1,8 +1,11 @@
 # flake8: noqa
 # import models into model package
+from fabric_ceph.openapi_server.models.apply_user_response import ApplyUserResponse
+from fabric_ceph.openapi_server.models.cap_render_context import CapRenderContext
 from fabric_ceph.openapi_server.models.capability import Capability
+from fabric_ceph.openapi_server.models.capability_template import CapabilityTemplate
 from fabric_ceph.openapi_server.models.ceph_user import CephUser
-from fabric_ceph.openapi_server.models.create_or_update_user_request import CreateOrUpdateUserRequest
+from fabric_ceph.openapi_server.models.create_user_templated_request import CreateUserTemplatedRequest
 from fabric_ceph.openapi_server.models.export_users_request import ExportUsersRequest
 from fabric_ceph.openapi_server.models.status200_ok_no_content import Status200OkNoContent
 from fabric_ceph.openapi_server.models.status200_ok_no_content_data import Status200OkNoContentData

@@ -1,5 +1,4 @@
-import fabric_ceph.response.ceph_fs_controller as rc
-
+from fabric_ceph.response import ceph_fs_controller as rc
 
 def create_or_resize_subvolume(vol_name, body):  # noqa: E501
     """Create or resize a subvolume
@@ -8,12 +7,13 @@ def create_or_resize_subvolume(vol_name, body):  # noqa: E501
 
     :param vol_name: CephFS volume name (filesystem), e.g. &#x60;CEPH-FS-01&#x60;
     :type vol_name: str
-    :param subvolume_create_or_resize_request:
+    :param subvolume_create_or_resize_request: 
     :type subvolume_create_or_resize_request: dict | bytes
 
     :rtype: Union[Status200OkNoContent, Tuple[Status200OkNoContent, int], Tuple[Status200OkNoContent, int, Dict[str, str]]
     """
-    return rc.create_or_resize_subvolume(vol_name, body=body)
+    return rc.create_or_resize_subvolume(vol_name, body)
+
 
 def delete_subvolume(vol_name, subvol_name, group_name=None, force=None):  # noqa: E501
     """Delete a subvolume

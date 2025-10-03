@@ -1,4 +1,4 @@
-from typing import List
+from fabric_ceph.response import security_controller as rc
 
 
 def info_from_bearerAuth(token):
@@ -12,5 +12,5 @@ def info_from_bearerAuth(token):
     :return: Decoded token information or None if token is invalid
     :rtype: dict | None
     """
-    return {'uid': 'user_id'}
+    return rc.info_from_bearerAuth(token)
 

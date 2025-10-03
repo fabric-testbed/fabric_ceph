@@ -23,7 +23,7 @@
 #
 #
 # Author: Komal Thareja (kthare10@renci.org)
-
+import logging
 from dataclasses import dataclass
 from typing import List, Dict, Optional
 import os
@@ -65,6 +65,7 @@ def update_user_across_clusters(
       - Export SOURCE keyring.
       - SSH-import that keyring on every other cluster (creates/updates there).
     """
+    logger = logging.getLogger(cfg.logging.logger)
     # Build clients
     clients: Dict[str, DashClient] = {name: DashClient.for_cluster(name, entry)
                                       for name, entry in cfg.cluster.items()}
@@ -78,6 +79,7 @@ def update_user_across_clusters(
                 source_name = name
                 break
         except Exception:
+            logger.exception(f"Encountered exception while getting {user_entity} on {name}")
             continue
 
     created_on_source = False

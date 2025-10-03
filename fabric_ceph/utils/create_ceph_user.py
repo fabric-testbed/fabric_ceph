@@ -23,6 +23,7 @@
 #
 #
 # Author: Komal Thareja (kthare10@renci.org)
+import logging
 import os
 from dataclasses import dataclass
 from typing import List, Dict, Optional
@@ -66,6 +67,8 @@ def ensure_user_across_clusters(
 
     Returns a dict summary (source, existed, created, imported_to).
     """
+    logger = logging.getLogger(cfg.logging.logger)
+
     # Build Dashboard clients for all clusters
     clients: Dict[str, DashClient] = {}
     for name, entry in cfg.cluster.items():
@@ -80,7 +83,7 @@ def ensure_user_across_clusters(
                 source_name = name
                 break
         except Exception as e:
-            # Non-fatal: keep looking (log if you have a logger)
+            logger.error(f"Encountered exception while fetching {user_entity} on {name}: {e}")
             pass
 
     existed = source_name is not None

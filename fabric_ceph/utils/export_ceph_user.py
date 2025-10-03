@@ -23,7 +23,7 @@
 #
 #
 # Author: Komal Thareja (kthare10@renci.org)
-
+import logging
 from typing import Dict, List, Optional, Tuple
 
 from fabric_ceph.common.config import Config
@@ -45,6 +45,7 @@ def list_users_first_success(
     Raises:
         RuntimeError if all clusters fail (with per-cluster error details).
     """
+    logger = logging.getLogger(cfg.logging.logger)
     clients: Dict[str, DashClient] = {name: DashClient.for_cluster(name, entry)
                                       for name, entry in cfg.cluster.items()}
 
@@ -54,6 +55,7 @@ def list_users_first_success(
             users = dc.list_users()
             return {"cluster": name, "users": users}
         except Exception as e:
+            logger.exception(f"Encountered exception while fetching users on {name}")
             errors[name] = str(e)
             continue
     raise RuntimeError(f"list_users failed on all clusters: {errors}")
@@ -80,6 +82,7 @@ def export_users_first_success(
         ValueError if entities is empty.
         RuntimeError if all clusters fail (with per-cluster error details).
     """
+    logger = logging.getLogger(cfg.logging.logger)
     if not entities:
         raise ValueError("entities must be a non-empty list")
 
@@ -106,6 +109,7 @@ def export_users_first_success(
             return {"cluster": name, "keyring": keyring_text}
 
         except Exception as e:
+            logger.exception(f"Encountered exception while exporting users on {name}")
             errors[name] = str(e)
             continue
 

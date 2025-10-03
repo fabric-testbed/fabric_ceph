@@ -25,6 +25,7 @@
 # Author: Komal Thareja (kthare10@renci.org)
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
 from typing import Dict, List, Optional
 
@@ -103,6 +104,7 @@ def ensure_subvolume_across_clusters(
       - On all other clusters: ensure group; create/resize with same parameters (idempotent).
       - Gather 'path' for each cluster via info() and return a consolidated result.
     """
+    logger = logging.getLogger(cfg.logging.logger)
     clients: Dict[str, DashClient] = {name: DashClient.for_cluster(name, entry)
                                       for name, entry in cfg.cluster.items()}
 
@@ -114,6 +116,8 @@ def ensure_subvolume_across_clusters(
                 source_name = name
                 break
         except Exception:
+            logger.warning("Subvolume %s with group %s does not exist on %s",
+                           subvol_name, group_name, fs_name)
             continue
 
     existed_on_source = source_name is not None
@@ -168,6 +172,10 @@ def ensure_subvolume_across_clusters(
                 paths[name] = spath
 
         except Exception as e:
+            logger.error("Subvolume %s with group %s could not be created on %s at cluster %s",
+                        subvol_name, group_name, fs_name, name)
+            logger.exception(e)
+
             errors[name] = str(e)
 
     # 2) source first
@@ -206,6 +214,7 @@ def delete_subvolume_across_clusters(
     Delete a subvolume from every cluster (best effort).
     Returns which clusters deleted it, which didn't have it, and any errors.
     """
+    logger = logging.getLogger(cfg.logging.logger)
     clients: Dict[str, DashClient] = {name: DashClient.for_cluster(name, entry)
                                       for name, entry in cfg.cluster.items()}
 
@@ -221,6 +230,8 @@ def delete_subvolume_across_clusters(
             else:
                 not_found.append(name)
         except Exception as e:
+            logger.error("Subvolume %s with group %s could not be deleted on %s at cluster %s",
+                         subvol_name, group_name, fs_name, name)
             errors[name] = str(e)
 
     return SubvolDeleteResult(

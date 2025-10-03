@@ -23,6 +23,7 @@
 #
 #
 # Author: Komal Thareja (kthare10@renci.org)
+import logging
 from dataclasses import dataclass
 from typing import List, Dict
 
@@ -53,6 +54,7 @@ def delete_user_across_clusters(
     Try to delete `user_entity` from every cluster.
     Returns a summary with per-cluster outcomes.
     """
+    logger = logging.getLogger(cfg.logging.logger)
     clients: Dict[str, DashClient] = {name: DashClient.for_cluster(name, entry)
                                       for name, entry in cfg.cluster.items()}
 
@@ -68,6 +70,7 @@ def delete_user_across_clusters(
             else:
                 not_found.append(name)
         except Exception as e:
+            logger.exception(f"Encountered exception while deleting {user_entity} on {name}")
             errors[name] = str(e)
 
     return DeleteResult(

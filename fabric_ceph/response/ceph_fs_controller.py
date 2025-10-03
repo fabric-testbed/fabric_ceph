@@ -9,7 +9,7 @@ from fabric_ceph.openapi_server.models import SubvolumeInfo, SubvolumeExists
 from fabric_ceph.openapi_server.models.status200_ok_no_content import Status200OkNoContent  # noqa: E501
 from fabric_ceph.openapi_server.models.subvolume_create_or_resize_request import SubvolumeCreateOrResizeRequest  # noqa: E501
 from fabric_ceph.response.ceph_exception import CephException
-from fabric_ceph.response.cors_response import cors_401
+from fabric_ceph.response.cors_response import cors_401, cors_500
 from fabric_ceph.utils.utils import cors_success_response, cors_error_response, ordered_cluster_names, build_clients, \
     authorize
 from fabric_ceph.utils.ceph_fs_helper import ensure_subvolume_across_clusters, delete_subvolume_across_clusters
@@ -51,7 +51,11 @@ def create_or_resize_subvolume(vol_name, body):  # noqa: E501
                                                   #preferred_source="europe",
                                                   # optional
                                                   )
-
+        errors: dict = (result.get("errors") or {})
+        any_error = bool(errors)
+        if any_error:
+            details = " ".join(f"{k}:{v}" for k, v in errors.items())
+            return cors_500(details=details)
         response = Status200OkNoContent()
         response.data = [result]
         response.size = len(response.data)
@@ -94,6 +98,12 @@ def delete_subvolume(vol_name, subvol_name, group_name=None, force=None):  # noq
                                                   subvol_name=subvol_name,
                                                   group_name=group_name,
                                                   force=force)
+
+        errors: dict = (result.get("errors") or {})
+        any_error = bool(errors)
+        if any_error:
+            details = " ".join(f"{k}:{v}" for k, v in errors.items())
+            return cors_500(details=details)
 
         response = Status200OkNoContent()
         response.data = [result]
@@ -141,7 +151,7 @@ def get_subvolume_info(vol_name, subvol_name, group_name=None):  # noqa: E501
                 return cors_success_response(response_body=info)
             except Exception as e:
                 errors[name] = str(e)
-                log.debug("get_subvolume_info failed on %s: %s", name, e)
+                log.exception("get_subvolume_info failed on %s: %s", name, e)
                 continue
 
         # Nothing succeeded
@@ -186,7 +196,7 @@ def subvolume_exists(vol_name, subvol_name, group_name=None):  # noqa: E501
                 # If not on this cluster, keep trying others
             except Exception as e:
                 errors[name] = str(e)
-                log.debug("subvolume_exists check failed on %s: %s", name, e)
+                log.exception("subvolume_exists check failed on %s: %s", name, e)
                 continue
 
         # If we reach here, it wasn't found on any cluster (or all checks failed)

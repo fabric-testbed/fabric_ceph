@@ -5,17 +5,20 @@ Ceph Manager Client (Python)
 
 Minimal, friendly wrapper for the FABRIC Ceph Manager service.
 
-Features
-- CephX users: list/create/update(delete)/export keyrings
-- CephFS subvolumes: group create, subvolume create/resize, info(getpath), exists, delete
-- X-Cluster routing header support
-- Retries on transient errors; consistent exceptions
+New in this version
+- Token can be provided via `token` (string) or `token_file` (path to JSON or text file).
+- If the file is JSON, the field `id_token` is extracted by default (configurable via `token_key`).
+- Helper `refresh_token_from_file()` to re-read the file on demand.
+- Also supports environment variables: FABRIC_CEPH_TOKEN, FABRIC_CEPH_TOKEN_FILE.
 """
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, Tuple, Union
+from pathlib import Path
+import json
+import os
 
 import requests
 from requests.adapters import HTTPAdapter
@@ -38,15 +41,36 @@ class ApiError(RuntimeError):
 @dataclass
 class CephManagerClient:
     base_url: str
+    # Auth options (choose one):
     token: Optional[str] = None
+    token_file: Optional[Union[str, Path]] = None
+    token_key: str = "id_token"  # JSON field to extract when reading token_file
+
     timeout: int = 60
     verify: bool = True
     default_x_cluster: Optional[str] = None
     accept: str = "application/json, text/plain"
 
+    # internal
+    _session: requests.Session = field(init=False, repr=False, compare=False)
+
     def __post_init__(self):
         # Normalize base url (no trailing slash)
         self.base_url = self.base_url.rstrip("/")
+
+        # Allow env overrides if args not set
+        if not self.token and not self.token_file:
+            env_token = os.getenv("FABRIC_CEPH_TOKEN")
+            env_token_file = os.getenv("FABRIC_CEPH_TOKEN_FILE")
+            if env_token:
+                self.token = env_token
+            elif env_token_file:
+                self.token_file = env_token_file
+
+        # If a token file is provided, load from it now
+        if self.token_file and not self.token:
+            self.refresh_token_from_file()
+
         self._session = requests.Session()
         # Robust retries for idempotent verbs
         retry = Retry(
@@ -59,14 +83,48 @@ class CephManagerClient:
         self._session.mount("http://", HTTPAdapter(max_retries=retry))
         self._session.mount("https://", HTTPAdapter(max_retries=retry))
 
-    # ----- internal helpers -----
+    # ----- auth helpers -----
+
+    def refresh_token_from_file(self) -> None:
+        """
+        Re-read `token_file` and set `self.token`.
+        - If the file is JSON, extract `self.token_key` (default: 'id_token').
+        - If not JSON, treat the file as plain-text with the token on a single line.
+        """
+        if not self.token_file:
+            raise ValueError("token_file is not set")
+
+        path = Path(self.token_file)
+        if not path.exists():
+            raise FileNotFoundError(f"Token file not found: {path}")
+
+        raw = path.read_text(encoding="utf-8").strip()
+        try:
+            obj = json.loads(raw)
+            # Use configured key; fall back to common alternatives if missing
+            token = (
+                obj.get(self.token_key)
+                or obj.get("access_token")
+                or obj.get("token")
+            )
+            if not token:
+                raise KeyError(
+                    f"Token file JSON does not contain '{self.token_key}', 'access_token', or 'token'."
+                )
+            self.token = str(token).strip()
+        except json.JSONDecodeError:
+            # Plain text file containing the token
+            self.token = raw
+
+        if not self.token:
+            raise ValueError("Token could not be loaded from token_file")
+
+    # ----- internal request helpers -----
 
     def _headers(self, extra: Optional[Dict[str, str]] = None, x_cluster: Optional[str] = None) -> Dict[str, str]:
         h = {"Accept": self.accept}
         if self.token:
             h["Authorization"] = f"Bearer {self.token}"
-        # If the server supports vendor media types you can also set:
-        # h["Accept"] = "application/vnd.ceph.api.v1.0+json, application/json, text/plain"
         if x_cluster:
             h["X-Cluster"] = x_cluster
         elif self.default_x_cluster:
@@ -109,10 +167,10 @@ class CephManagerClient:
             if self._is_json(resp):
                 try:
                     payload = resp.json()
-                    # try common shapes
                     message = (
                         payload.get("message")
-                        or (payload.get("errors", [{}])[0].get("message") if isinstance(payload.get("errors"), list) and payload["errors"] else "")
+                        or (payload.get("errors", [{}])[0].get("message")
+                            if isinstance(payload.get("errors"), list) and payload["errors"] else "")
                         or payload.get("detail")
                         or ""
                     )
@@ -165,7 +223,6 @@ class CephManagerClient:
             return str(res["keyring"])
         if isinstance(res, str):
             return res
-        # Fallback: best effort stringify
         return str(res)
 
     # --------------------- CephFS (subvolumes) ---------------------
@@ -214,7 +271,6 @@ class CephManagerClient:
         res = self._request("GET", f"/cephfs/subvolume/{vol_name}/exists", params=params, x_cluster=x_cluster)
         if isinstance(res, dict) and "exists" in res:
             return bool(res["exists"])
-        # Best effort fallback
         return bool(res)
 
     def delete_subvolume(

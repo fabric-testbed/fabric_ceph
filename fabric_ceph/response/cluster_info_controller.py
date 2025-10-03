@@ -64,7 +64,9 @@ def list_cluster_info():
         for name, dc in clients.items():
             try:
                 fsid = dc.get_cluster_fsid()
+                log.debug(f"Found fsid {fsid}")
                 mon_json = dc.get_monitor_map()
+                log.debug(f"Found mon json {mon_json}")
                 mons = _parse_mon_map(mon_json)
                 mon_host = _format_mon_host(mons)
                 ceph_conf = (

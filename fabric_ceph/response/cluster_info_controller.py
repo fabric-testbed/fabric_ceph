@@ -7,6 +7,25 @@ from fabric_ceph.openapi_server.models import ClusterInfoList, ClusterInfoItem
 from fabric_ceph.utils.dash_client import DashClient
 from fabric_ceph.utils.utils import cors_success_response, cors_error_response
 
+def _extract_monmap(obj: Dict[str, Any]) -> Dict[str, Any]:
+    """Support both /api/monitor shapes:
+       - {"monmap": {...}}
+       - {"mon_status": {"monmap": {...}, ...}, ...}
+    """
+    if not obj:
+        return {}
+    if "monmap" in obj and isinstance(obj["monmap"], dict):
+        return obj["monmap"]
+    ms = obj.get("mon_status")
+    if isinstance(ms, dict) and isinstance(ms.get("monmap"), dict):
+        return ms["monmap"]
+    return {}
+
+def _norm_addr(addr: Optional[str]) -> Optional[str]:
+    """Ensure addr ends with '/0' (Ceph style)."""
+    if not addr:
+        return None
+    return addr if "/" in addr else f"{addr}/0"
 
 def _parse_mon_map(mon_json: Dict[str, Any]) -> List[Dict[str, Optional[str]]]:
     """
@@ -14,22 +33,24 @@ def _parse_mon_map(mon_json: Dict[str, Any]) -> List[Dict[str, Optional[str]]]:
     Works for addrvec (msgr2+msgr1) and falls back if only v1 is present.
     """
     mons_out: List[Dict[str, Optional[str]]] = []
-    mons = (mon_json or {}).get("monmap", {}).get("mons", [])
+    monmap = _extract_monmap(mon_json)
+    mons = (monmap or {}).get("mons", []) or []
     for m in mons:
-        name = m.get("name") or m.get("rank")  # best-effort
+        name = m.get("name") or str(m.get("rank"))
         v1 = None
         v2 = None
         addrvec = ((m.get("public_addrs") or {}).get("addrvec") or [])
+        # Preferred: addrvec (has separate v2/v1 entries)
         for a in addrvec:
             t = a.get("type")
             addr = a.get("addr")
             if t == "v2":
-                v2 = addr
+                v2 = _norm_addr(addr)
             elif t == "v1":
-                v1 = addr
-        if not addrvec:
-            # very old shape: "public_addr": "IP:6789/0"
-            v1 = m.get("public_addr")
+                v1 = _norm_addr(addr)
+        # Fallback: very old shape
+        if not addrvec and m.get("public_addr"):
+            v1 = _norm_addr(m["public_addr"])
         mons_out.append({"name": name, "v2": v2, "v1": v1})
     return mons_out
 

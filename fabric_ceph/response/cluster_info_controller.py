@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import Dict, Any, List, Optional
 
 from fabric_ceph.common.globals import get_globals
+from fabric_ceph.openapi_server.models import ClusterInfoList, ClusterInfoItem
 from fabric_ceph.utils.dash_client import DashClient
 from fabric_ceph.utils.utils import cors_success_response, cors_error_response
 
@@ -90,13 +91,16 @@ def list_cluster_info():
                     "error": str(e),
                 })
 
-        resp = {
-            "type": "cluster_info",
-            "status": 200,
-            "size": len(items),
-            "data": items,
-        }
-        return cors_success_response(response_body=resp)
+        response = ClusterInfoList()
+        response.data = []
+        response.type = 'clusters'
+        for c in items:
+            cluster = ClusterInfoItem.from_dict(c)
+            response.data.append(cluster)
+        response.size = len(response.data)
+        response.status = 200
+
+        return cors_success_response(response_body=response)
 
     except Exception as e:
         g.log.exception(e)

@@ -160,9 +160,8 @@ def export_users(body):  # noqa: E501
         log.debug(f"Exported CephX users: {result}")
 
         response = Users()
-        user = CephUser(user_entity=body.get('user_entity'),
-                        capabilities=body.get('capabilities'),
-                        keys=[result.get('key_ring')],)
+        for user in result:
+            ceph_user = CephUser.from_dict({"keys": user.get("")})
         response.data = [user]
         response.size = len(response.data)
         response.type = "users"

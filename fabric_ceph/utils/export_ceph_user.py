@@ -91,26 +91,18 @@ def export_users_first_success(
     clients: Dict[str, DashClient] = {name: DashClient.for_cluster(name, entry)
                                       for name, entry in cfg.cluster.items()}
 
+    result = {}
+
     for name, dc in clients.items():
         try:
-            # Prefer a multi-entity export if your DashClient supports it
-            keyring_text: Optional[str] = None
-            export_many = getattr(dc, "export_users", None)
-            if callable(export_many):
-                keyring_text = export_many(entities)  # type: ignore[attr-defined]
-            else:
-                # Fallback: export each entity and concatenate
-                parts: List[str] = []
-                for ent in entities:
-                    parts.append(dc.export_keyring(ent))
-                # Normalize to a single blob; ensure trailing newline for keyring parsers
-                keyring_text = ("\n".join(p.strip() for p in parts)).strip() + "\n"
+            exported_entities = {}
+            for ent in entities:
+                exported_entities[ent] = dc.export_keyring(ent)
 
-            return {"cluster": name, "keyring": keyring_text}
+            result[name] = exported_entities
 
         except Exception as e:
             logger.exception(f"Encountered exception while exporting users on {name}")
             errors[name] = str(e)
             continue
-
-    raise RuntimeError(f"export_users failed on all clusters: {errors}")
+    return result

@@ -161,7 +161,7 @@ def export_users(body):  # noqa: E501
 
         response = ExportUsersResponse()
         response.clusters = clusters
-        response.size = len(response.data)
+        response.size = len(response.clusters)
         response.status = 200
         response.type = "keyring"
         return cors_success_response(response_body=response)

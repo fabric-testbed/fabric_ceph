@@ -7,7 +7,7 @@ from fabric_ceph.openapi_server.models.capability import Capability
 from fabric_ceph.openapi_server import util
 
 from fabric_ceph.openapi_server.models.capability import Capability  # noqa: E501
-from fabric_ceph.openapi_server.serialization import deep_to_dict
+from fabric_ceph.response.serialization import deep_to_dict
 
 
 class ApplyUserResponse(Model):

@@ -523,7 +523,43 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/users"
+                $ref: "#/components/schemas/ExportUsersResponse"
+              examples:
+                perCluster:
+                  summary: Cluster → entity → keyring text
+                  value:
+                    clusters:
+                      east:
+                        client.kthare10_0011904101: |
+                          [client.kthare10_0011904101]
+                              key = AQApM+BoJQCNABAA+id/X+Jnf...
+                              caps mds = "allow rw fsname=CEPH-FS-01 path=/volumes/_nogroup/kthare10_001..."
+                              caps mon = "allow r fsname=CEPH-FS-01"
+                              caps osd = "allow rw tag cephfs data=CEPH-FS-01"
+                        client.pruth_0031379841: |
+                          [client.pruth_0031379841]
+                              key = AQAXPuBoDvsMLRAA/wY0kk2W...
+                              caps mds = "allow rw fsname=CEPH-FS-01 path=/volumes/_nogroup/pruth_003..."
+                              caps mon = "allow r fsname=CEPH-FS-01"
+                              caps osd = "allow rw tag cephfs data=CEPH-FS-01"
+                    type: keyrings
+                    size: 2
+                    status: 200
+            text/plain:
+              # Optional: combined/concatenated keyring text for all entities (legacy-friendly)
+              schema:
+                type: string
+              examples:
+                concatenated:
+                  value: |
+                    [client.kthare10_0011904101]
+                        key = AQApM+Bo...
+                        caps mds = "allow ..."
+                        ...
+                    [client.pruth_0031379841]
+                        key = AQAXPuBo...
+                        caps mds = "allow ..."
+                        ...
         "400":
           description: Bad Request
           content:
@@ -891,19 +927,29 @@ components:
             type: string
           example: ["client.demo","client.alice"]
 
-    SubvolumeGroupCreateRequest:
+    ExportUsersResponse:
       type: object
-      required: [vol_name, group_name]
-      properties:
-        vol_name:
-          type: string
-          description: CephFS volume name (filesystem), e.g. `CEPH-FS-01`
-        group_name:
-          type: string
-          description: Subvolume group name
-      example:
-        vol_name: CEPH-FS-01
-        group_name: fabric_staff
+      allOf:
+        - $ref: '#/components/schemas/status_200_ok_single'
+        - type: object
+          properties:
+            type:
+              type: string
+              default: keyrings
+            clusters:
+              $ref: '#/components/schemas/ClusterKeyringsMap'
+
+    ClusterKeyringsMap:
+      description: Map of cluster name → keyring map
+      type: object
+      additionalProperties:
+        $ref: '#/components/schemas/EntityKeyringMap'
+
+    EntityKeyringMap:
+      description: Map of CephX entity → keyring text
+      type: object
+      additionalProperties:
+        type: string
 
     SubvolumeCreateOrResizeRequest:
       type: object

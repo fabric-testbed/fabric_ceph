@@ -37,7 +37,7 @@ def export_users(body):  # noqa: E501
     :param export_users_request: 
     :type export_users_request: dict | bytes
 
-    :rtype: Union[Users, Tuple[Users, int], Tuple[Users, int, Dict[str, str]]
+    :rtype: Union[ExportUsersResponse, Tuple[ExportUsersResponse, int], Tuple[ExportUsersResponse, int, Dict[str, str]]
     """
     return rc.export_users(body)
 

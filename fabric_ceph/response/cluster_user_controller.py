@@ -4,7 +4,7 @@ import connexion
 
 from fabric_ceph.common.globals import get_globals
 from fabric_ceph.openapi_server.models import Users, CephUser, Status200OkNoContentData, Status200OkNoContent, \
-    ApplyUserResponse
+    ApplyUserResponse, ExportUsersResponse
 from fabric_ceph.openapi_server.models.export_users_request import ExportUsersRequest  # noqa: E501
 from fabric_ceph.response.cors_response import cors_401, cors_400, cors_500, cors_200
 from fabric_ceph.utils.utils import cors_success_response, cors_error_response, authorize
@@ -138,7 +138,7 @@ def export_users(body):  # noqa: E501
     :param export_users_request:
     :type export_users_request: dict | bytes
 
-    :rtype: Union[str, Tuple[str, int], Tuple[str, int, Dict[str, str]]
+    :rtype: Union[ExportUsersResponse, Tuple[ExportUsersResponse, int], Tuple[ExportUsersResponse, int, Dict[str, str]]
     """
     export_users_request = body
     if connexion.request.is_json:
@@ -156,15 +156,14 @@ def export_users(body):  # noqa: E501
             return cors_401(details=f"{fabric_token.uuid}/{fabric_token.email} is not authorized!")
 
         cfg = globals.config
-        result = export_users_first_success(cfg=cfg, entities=export_users_request.entities)
-        log.debug(f"Exported CephX users: {result}")
+        clusters = export_users_first_success(cfg=cfg, entities=export_users_request.entities)
+        log.debug(f"Exported CephX users: {clusters}")
 
-        response = Users()
-        for user in result:
-            ceph_user = CephUser.from_dict({"keys": user.get("")})
-        response.data = [user]
+        response = ExportUsersResponse()
+        response.clusters = clusters
         response.size = len(response.data)
-        response.type = "users"
+        response.status = 200
+        response.type = "keyring"
         return cors_success_response(response_body=response)
     except Exception as e:
         log.exception(f"Failed processing CephX export request: {e}")

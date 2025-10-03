@@ -149,19 +149,27 @@ def get_subvolume_info(vol_name, subvol_name, group_name=None):  # noqa: E501
         names = ordered_cluster_names(cfg)
         clients = build_clients(cfg, names)
 
+        clusters = {}
         errors: Dict[str, str] = {}
         for name, dc in clients:
             try:
                 js = dc.get_subvolume_info(vol_name, subvol_name, group_name)
-                # Convert to generated model (allows extra properties)
-                info = SubvolumeInfo.from_dict(js)
-                log.debug(f"Subvolume info: {info} on {name}")
-                # Optional: include which cluster served the info
-                return cors_success_response(response_body=info)
+                clusters[name] = js
             except Exception as e:
                 errors[name] = str(e)
                 log.exception("get_subvolume_info failed on %s: %s", name, e)
                 continue
+
+        if len(clusters):
+            vol_info = Status200OkNoContentData()
+            vol_info.message = f"Subvolume {vol_name} deleted."
+            vol_info.details = clusters
+            response = Status200OkNoContent()
+            response.data = [vol_info]
+            response.size = len(response.data)
+            response.status = 200
+            response.type = 'no_content'
+            return cors_success_response(response_body=response)
 
         # Nothing succeeded
         log.error(f"Subvolume {subvol_name}/{group_name} on {vol_name} not found or info unavailable on any cluster")

@@ -200,6 +200,39 @@ class CephManagerClient:
             return resp.json()
         return resp.text
 
+    # --------------------- Cluster info ---------------------
+
+    def list_cluster_info(self) -> Dict[str, Any]:
+        """
+        GET /cluster/info
+        Returns an envelope with `data` = list of per-cluster objects:
+          {
+            "cluster": "europe",
+            "fsid": "...",
+            "mons": [{"name":"mon.a","v2":"ip:3300/0","v1":"ip:6789/0"}, ...],
+            "mon_host": "[v2:...,v1:...] ...",
+            "ceph_conf_minimal": "[global]\\n\\tfsid = ...\\n\\tmon_host = ...\\n",
+            "error": null
+          }
+        """
+        return self._request("GET", "/cluster/info")
+
+    def cluster_minimal_confs(self) -> Dict[str, str]:
+        """
+        Convenience: returns {cluster_name: ceph_conf_minimal}.
+        If a cluster has an error or missing snippet, it is omitted from the map.
+        """
+        info = self.list_cluster_info()
+        out: Dict[str, str] = {}
+        items = (info or {}).get("data", []) if isinstance(info, dict) else []
+        for item in items:
+            if isinstance(item, dict) and not item.get("error"):
+                cluster = item.get("cluster")
+                conf = item.get("ceph_conf_minimal")
+                if cluster and isinstance(conf, str) and conf.strip():
+                    out[cluster] = conf
+        return out
+
     # --------------------- Cluster User (templated, cross-cluster sync) ---------------------
 
     def apply_user_templated(
@@ -268,6 +301,7 @@ class CephManagerClient:
         return str(res)
 
     # --------------------- CephFS (subvolumes) ---------------------
+
     def create_or_resize_subvolume(
         self,
         vol_name: str,

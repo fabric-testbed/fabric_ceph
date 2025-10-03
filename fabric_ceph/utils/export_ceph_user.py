@@ -28,7 +28,7 @@ from typing import Dict, List, Optional, Tuple
 
 from fabric_ceph.common.config import Config
 from fabric_ceph.utils.dash_client import DashClient
-from fabric_ceph.utils.keyring_parser import extract_key_from_keyring
+from fabric_ceph.utils.keyring_parser import extract_key_from_keyring, keyring_minimal
 
 
 def list_users_first_success(
@@ -101,7 +101,7 @@ def export_users_first_success(
             for ent in entities:
                 keyring = dc.export_keyring(ent)
                 if keyring_only:
-                    key = extract_key_from_keyring(keyring, ent) or ""
+                    key = keyring_minimal(keyring)
                     if not key:
                         raise RuntimeError("key not found in exported keyring")
                     exported_entities[ent] = key

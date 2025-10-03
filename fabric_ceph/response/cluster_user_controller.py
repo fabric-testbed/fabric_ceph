@@ -3,14 +3,13 @@ from typing import Dict
 import connexion
 
 from fabric_ceph.common.globals import get_globals
-from fabric_ceph.openapi_server.models import Users, CephUser, Status200OkNoContent
+from fabric_ceph.openapi_server.models import Users, CephUser, Status200OkNoContentData, Status200OkNoContent
 from fabric_ceph.openapi_server.models.export_users_request import ExportUsersRequest  # noqa: E501
 from fabric_ceph.response.cors_response import cors_401, cors_400, cors_500
 from fabric_ceph.utils.utils import cors_success_response, cors_error_response, authorize
 from fabric_ceph.utils.create_ceph_user import ensure_user_across_clusters_with_cluster_paths
 from fabric_ceph.utils.delete_ceph_user import delete_user_across_clusters
 from fabric_ceph.utils.export_ceph_user import export_users_first_success, list_users_first_success
-from fabric_ceph.utils.update_ceph_user import update_user_across_clusters
 
 
 def apply_user_templated(body: Dict, x_cluster=None):  # operationId: applyUserTemplated
@@ -108,8 +107,11 @@ def delete_user(entity):  # noqa: E501
             details = " ".join(f"{k}:{v}" for k, v in errors.items())
             return cors_500(details=details)
 
+        user_info = Status200OkNoContentData()
+        user_info.message = f"Subvolume {user_info} deleted."
+        user_info.details = result
         response = Status200OkNoContent()
-        response.data = [result]
+        response.data = [user_info]
         response.size = len(response.data)
         response.status = 200
         response.type = 'no_content'
@@ -182,49 +184,17 @@ def list_users():  # noqa: E501
         result = list_users_first_success(cfg=cfg)
         log.debug(f"Updated CephX list users: {result}")
 
+        users = []
+        for user in result:
+            user = CephUser.from_dict(user)
+            users.append(user)
+
         response = Users()
-        response.data = [result]
+        response.data = [users]
         response.size = len(response.data)
         response.status = 200
         response.type = 'no_content'
         return cors_success_response(response_body=response)
     except Exception as e:
         log.exception(f"Failed processing CephX list request: {e}")
-        return cors_error_response(error=e)
-
-
-def update_user(body):  # noqa: E501
-    """Update/overwrite capabilities for a CephX user
-
-     # noqa: E501
-
-    :param create_or_update_user_request:
-    :type create_or_update_user_request: dict | bytes
-
-    :rtype: Union[Status200OkNoContent, Tuple[Status200OkNoContent, int], Tuple[Status200OkNoContent, int, Dict[str, str]]
-    """
-    globals = get_globals()
-    log = globals.log
-    log.debug("Processing CephX update request")
-
-    try:
-        fabric_token, is_operator, bastion_login = authorize()
-        if not is_operator:
-            return cors_401(details=f"{fabric_token.uuid}/{fabric_token.email} is not authorized!")
-
-        cfg = globals.config
-        result = update_user_across_clusters(cfg=cfg, user_entity=body.get('user_entity'),
-                                             capabilities=body.get('capabilities'))
-        log.debug(f"Updated CephX user: {result}")
-
-        response = Status200OkNoContent()
-        response.data = [result]
-        response.size = len(response.data)
-        response.status = 200
-        response.type = 'no_content'
-        return cors_success_response(response_body=response)
-
-
-    except Exception as e:
-        log.exception(f"Failed processing CephX update request: {e}")
         return cors_error_response(error=e)

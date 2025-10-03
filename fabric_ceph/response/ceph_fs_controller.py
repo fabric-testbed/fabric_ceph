@@ -5,8 +5,8 @@ import connexion
 
 from fabric_ceph.common.config import Config
 from fabric_ceph.common.globals import get_globals
-from fabric_ceph.openapi_server.models import SubvolumeInfo, SubvolumeExists
-from fabric_ceph.openapi_server.models.status200_ok_no_content import Status200OkNoContent  # noqa: E501
+from fabric_ceph.openapi_server.models import SubvolumeInfo, SubvolumeExists, Status200OkNoContentData, \
+    Status200OkNoContent
 from fabric_ceph.openapi_server.models.subvolume_create_or_resize_request import SubvolumeCreateOrResizeRequest  # noqa: E501
 from fabric_ceph.response.ceph_exception import CephException
 from fabric_ceph.response.cors_response import cors_401, cors_500
@@ -56,8 +56,12 @@ def create_or_resize_subvolume(vol_name, body):  # noqa: E501
         if any_error:
             details = " ".join(f"{k}:{v}" for k, v in errors.items())
             return cors_500(details=details)
+
+        vol_info = Status200OkNoContentData()
+        vol_info.message = f"Subvolume {vol_name} created."
+        vol_info.details = result
         response = Status200OkNoContent()
-        response.data = [result]
+        response.data = [vol_info]
         response.size = len(response.data)
         response.status = 200
         response.type = 'no_content'
@@ -105,8 +109,11 @@ def delete_subvolume(vol_name, subvol_name, group_name=None, force=None):  # noq
             details = " ".join(f"{k}:{v}" for k, v in errors.items())
             return cors_500(details=details)
 
+        vol_info = Status200OkNoContentData()
+        vol_info.message = f"Subvolume {vol_name} deleted."
+        vol_info.details = result
         response = Status200OkNoContent()
-        response.data = [result]
+        response.data = [vol_info]
         response.size = len(response.data)
         response.status = 200
         response.type = 'no_content'

@@ -180,6 +180,7 @@ class CephManagerClient:
                 payload = resp.text
             raise ApiError(resp.status_code, url, message=message, payload=payload)
 
+        print(resp.json)
         if self._is_json(resp):
             return resp.json()
         return resp.text

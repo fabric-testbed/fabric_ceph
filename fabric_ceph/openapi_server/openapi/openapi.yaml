@@ -17,6 +17,7 @@ servers:
     port:
       default: "8443"
 tags:
+- name: Cluster Info
 - name: Cluster User
 - name: CephFS
 - name: version
@@ -318,6 +319,46 @@ paths:
       tags:
       - CephFS
       x-openapi-router-controller: fabric_ceph.openapi_server.controllers.ceph_fs_controller
+  /cluster/info:
+    get:
+      operationId: list_cluster_info
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ClusterInfoList"
+          description: OK
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/status_400_bad_request"
+          description: Bad Request
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/status_401_unauthorized"
+          description: Unauthorized
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/status_403_forbidden"
+          description: Forbidden
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/status_500_internal_server_error"
+          description: Internal Server Error
+      security:
+      - bearerAuth: []
+      summary: Get FSID and monitor endpoints for all clusters
+      tags:
+      - Cluster Info
+      x-openapi-router-controller: fabric_ceph.openapi_server.controllers.cluster_info_controller
   /cluster/user:
     get:
       operationId: list_users
@@ -1151,6 +1192,105 @@ components:
           type: object
       title: ApplyUserResponse
       type: object
+    ClusterInfoList:
+      allOf:
+      - $ref: "#/components/schemas/status_200_ok_paginated"
+      - properties:
+          type:
+            example: cluster_info
+            type: string
+          data:
+            items:
+              $ref: "#/components/schemas/ClusterInfoItem"
+            type: array
+        type: object
+      example:
+        total: 5
+        offset: 6
+        size: 1
+        data:
+        - cluster: europe
+          mons:
+          - name: mon.a
+            v1: 10.138.254.2:6789/0
+            v2: 10.138.254.2:3300/0
+          - name: mon.a
+            v1: 10.138.254.2:6789/0
+            v2: 10.138.254.2:3300/0
+          fsid: 13371194-879b-11f0-b06f-fa163e08d592
+          ceph_conf_minimal: |
+            [global]
+              fsid = 13371194-879b-11f0-b06f-fa163e08d592
+              mon_host = [v2:10.138.254.2:3300/0,v1:10.138.254.2:6789/0] [v2:10.135.254.2:3300/0,v1:10.135.254.2:6789/0]
+          error: error
+          mon_host: "[v2:10.138.254.2:3300/0,v1:10.138.254.2:6789/0] [v2:10.135.254.2:3300/0,v1:10.135.254.2:6789/0]"
+        - cluster: europe
+          mons:
+          - name: mon.a
+            v1: 10.138.254.2:6789/0
+            v2: 10.138.254.2:3300/0
+          - name: mon.a
+            v1: 10.138.254.2:6789/0
+            v2: 10.138.254.2:3300/0
+          fsid: 13371194-879b-11f0-b06f-fa163e08d592
+          ceph_conf_minimal: |
+            [global]
+              fsid = 13371194-879b-11f0-b06f-fa163e08d592
+              mon_host = [v2:10.138.254.2:3300/0,v1:10.138.254.2:6789/0] [v2:10.135.254.2:3300/0,v1:10.135.254.2:6789/0]
+          error: error
+          mon_host: "[v2:10.138.254.2:3300/0,v1:10.138.254.2:6789/0] [v2:10.135.254.2:3300/0,v1:10.135.254.2:6789/0]"
+        limit: 0
+        type: cluster_info
+        status: 5
+      title: ClusterInfoList
+    ClusterInfoItem:
+      example:
+        cluster: europe
+        mons:
+        - name: mon.a
+          v1: 10.138.254.2:6789/0
+          v2: 10.138.254.2:3300/0
+        - name: mon.a
+          v1: 10.138.254.2:6789/0
+          v2: 10.138.254.2:3300/0
+        fsid: 13371194-879b-11f0-b06f-fa163e08d592
+        ceph_conf_minimal: |
+          [global]
+            fsid = 13371194-879b-11f0-b06f-fa163e08d592
+            mon_host = [v2:10.138.254.2:3300/0,v1:10.138.254.2:6789/0] [v2:10.135.254.2:3300/0,v1:10.135.254.2:6789/0]
+        error: error
+        mon_host: "[v2:10.138.254.2:3300/0,v1:10.138.254.2:6789/0] [v2:10.135.254.2:3300/0,v1:10.135.254.2:6789/0]"
+      properties:
+        cluster:
+          example: europe
+          title: cluster
+          type: string
+        fsid:
+          example: 13371194-879b-11f0-b06f-fa163e08d592
+          title: fsid
+          type: string
+        mons:
+          items:
+            $ref: "#/components/schemas/ClusterInfoItem_mons_inner"
+          title: mons
+          type: array
+        mon_host:
+          example: "[v2:10.138.254.2:3300/0,v1:10.138.254.2:6789/0] [v2:10.135.254.2:3300/0,v1:10.135.254.2:6789/0]"
+          title: mon_host
+          type: string
+        ceph_conf_minimal:
+          example: |
+            [global]
+              fsid = 13371194-879b-11f0-b06f-fa163e08d592
+              mon_host = [v2:10.138.254.2:3300/0,v1:10.138.254.2:6789/0] [v2:10.135.254.2:3300/0,v1:10.135.254.2:6789/0]
+          title: ceph_conf_minimal
+          type: string
+        error:
+          nullable: true
+          title: error
+          type: string
+      title: ClusterInfoItem
+      type: object
     users:
       allOf:
       - $ref: "#/components/schemas/status_200_ok_paginated"
@@ -1341,6 +1481,28 @@ components:
         exists:
           type: boolean
       title: SubvolumeExists
+      type: object
+    ClusterInfoItem_mons_inner:
+      example:
+        name: mon.a
+        v1: 10.138.254.2:6789/0
+        v2: 10.138.254.2:3300/0
+      properties:
+        name:
+          example: mon.a
+          title: name
+          type: string
+        v2:
+          example: 10.138.254.2:3300/0
+          nullable: true
+          title: v2
+          type: string
+        v1:
+          example: 10.138.254.2:6789/0
+          nullable: true
+          title: v1
+          type: string
+      title: ClusterInfoItem_mons_inner
       type: object
   securitySchemes:
     bearerAuth:

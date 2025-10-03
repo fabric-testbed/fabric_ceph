@@ -263,3 +263,15 @@ class DashClient:
             except Exception:
                 detail = r.text
             raise RuntimeError(f"[{self.cluster_name}] subvolume delete failed: {r.status_code} {detail}")
+
+    def get_cluster_fsid(self) -> str:
+        r = requests.get(f"{self.base_api}/health/get_cluster_fsid",
+                         headers=self._hdrs(), timeout=60, verify=self.verify_tls)
+        r.raise_for_status()
+        return r.json() if isinstance(r.json(), str) else str(r.json())
+
+    def get_monitor_map(self) -> dict:
+        r = requests.get(f"{self.base_api}/monitor",
+                         headers=self._hdrs(), timeout=60, verify=self.verify_tls)
+        r.raise_for_status()
+        return r.json()

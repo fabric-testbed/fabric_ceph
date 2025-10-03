@@ -20,6 +20,7 @@ servers:
         default: "8443"
 
 tags:
+  - name: Cluster Info
   - name: Cluster User
   - name: CephFS
   - name: version
@@ -316,6 +317,41 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/status_500_internal_server_error'
+
+  /cluster/info:
+    get:
+      tags: [Cluster Info]   # or create a "Cluster" tag if you prefer
+      summary: Get FSID and monitor endpoints for all clusters
+      operationId: listClusterInfo
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ClusterInfoList"
+        "400":
+          description: Bad Request
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/status_400_bad_request' }
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/status_401_unauthorized' }
+        "403":
+          description: Forbidden
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/status_403_forbidden' }
+        "500":
+          description: Internal Server Error
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/status_500_internal_server_error' }
 
   /cluster/user:
     get:
@@ -883,6 +919,49 @@ components:
           type: object
           additionalProperties: { type: string }
           description: Map cluster -> error string (if any)
+
+    ClusterInfoList:
+      allOf:
+        - $ref: '#/components/schemas/status_200_ok_paginated'
+        - type: object
+          properties:
+            type:
+              type: string
+              example: cluster_info
+            data:
+              type: array
+              items:
+                $ref: '#/components/schemas/ClusterInfoItem'
+
+    ClusterInfoItem:
+      type: object
+      properties:
+        cluster:
+          type: string
+          example: europe
+        fsid:
+          type: string
+          example: "13371194-879b-11f0-b06f-fa163e08d592"
+        mons:
+          type: array
+          items:
+            type: object
+            properties:
+              name: { type: string, example: mon.a }
+              v2:   { type: string, nullable: true, example: "10.138.254.2:3300/0" }
+              v1:   { type: string, nullable: true, example: "10.138.254.2:6789/0" }
+        mon_host:
+          type: string
+          example: "[v2:10.138.254.2:3300/0,v1:10.138.254.2:6789/0] [v2:10.135.254.2:3300/0,v1:10.135.254.2:6789/0]"
+        ceph_conf_minimal:
+          type: string
+          example: |
+            [global]
+              fsid = 13371194-879b-11f0-b06f-fa163e08d592
+              mon_host = [v2:10.138.254.2:3300/0,v1:10.138.254.2:6789/0] [v2:10.135.254.2:3300/0,v1:10.135.254.2:6789/0]
+        error:
+          type: string
+          nullable: true
 
     users:
       type: object

@@ -162,7 +162,7 @@ def get_subvolume_info(vol_name, subvol_name, group_name=None):  # noqa: E501
 
         if len(clusters):
             vol_info = Status200OkNoContentData()
-            vol_info.message = f"Subvolume {vol_name} deleted."
+            vol_info.message = f"Subvolume {vol_name} information retrieved."
             vol_info.details = clusters
             response = Status200OkNoContent()
             response.data = [vol_info]

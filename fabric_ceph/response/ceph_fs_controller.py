@@ -142,6 +142,7 @@ def get_subvolume_info(vol_name, subvol_name, group_name=None):  # noqa: E501
     try:
         fabric_token, is_operator, bastion_login = authorize()
         if not is_operator and subvol_name.lower() != bastion_login.lower():
+            log.error(f"{fabric_token.uuid}/{fabric_token.email} is not authorized to access {vol_name}!")
             return cors_401(details=f"{fabric_token.uuid}/{fabric_token.email} is not authorized to access {vol_name}!")
 
         cfg: Config = g.config
@@ -153,7 +154,8 @@ def get_subvolume_info(vol_name, subvol_name, group_name=None):  # noqa: E501
             try:
                 js = dc.get_subvolume_info(vol_name, subvol_name, group_name)
                 # Convert to generated model (allows extra properties)
-                info = SubvolumeInfo().from_dict(js)
+                info = SubvolumeInfo.from_dict(js)
+                log.debug(f"Subvolume info: {info} on {name}")
                 # Optional: include which cluster served the info
                 return cors_success_response(response_body=info)
             except Exception as e:
@@ -162,6 +164,7 @@ def get_subvolume_info(vol_name, subvol_name, group_name=None):  # noqa: E501
                 continue
 
         # Nothing succeeded
+        log.error(f"Subvolume {subvol_name}/{group_name} on {vol_name} not found or info unavailable on any cluster")
         raise CephException("Subvolume not found or info unavailable on any cluster", http_error_code=NOT_FOUND)
     except Exception as e:
         g.log.exception(e)

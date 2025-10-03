@@ -42,6 +42,7 @@ def cors_response(req: request, status_code: int = 200, body: object = None, x_e
     response.headers['Access-Control-Allow-Headers'] = \
         'DNT, User-Agent, X-Requested-With, If-Modified-Since, Cache-Control, Content-Type, Range, Authorization'
     response.headers['Access-Control-Expose-Headers'] = 'Content-Length, Content-Range, X-Error'
+    response.headers['Content-Type'] = 'application/json'
 
     if x_error:
         response.headers['X-Error'] = x_error

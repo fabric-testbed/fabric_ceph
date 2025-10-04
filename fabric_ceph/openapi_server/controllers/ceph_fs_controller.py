@@ -1,5 +1,4 @@
-import fabric_ceph.response.ceph_fs_controller as rc
-
+from fabric_ceph.response import ceph_fs_controller as rc
 
 def create_or_resize_subvolume(vol_name, body):  # noqa: E501
     """Create or resize a subvolume
@@ -13,7 +12,8 @@ def create_or_resize_subvolume(vol_name, body):  # noqa: E501
 
     :rtype: Union[Status200OkNoContent, Tuple[Status200OkNoContent, int], Tuple[Status200OkNoContent, int, Dict[str, str]]
     """
-    return rc.create_or_resize_subvolume(vol_name, body=body)
+    return rc.create_or_resize_subvolume(vol_name, body)
+
 
 def delete_subvolume(vol_name, subvol_name, group_name=None, force=None):  # noqa: E501
     """Delete a subvolume
@@ -22,9 +22,9 @@ def delete_subvolume(vol_name, subvol_name, group_name=None, force=None):  # noq
 
     :param vol_name: CephFS volume name (filesystem)
     :type vol_name: str
-    :param subvol_name: 
+    :param subvol_name:
     :type subvol_name: str
-    :param group_name: 
+    :param group_name:
     :type group_name: str
     :param force: Force delete even if snapshots exist (behavior depends on cluster policy)
     :type force: bool
@@ -41,9 +41,9 @@ def get_subvolume_info(vol_name, subvol_name, group_name=None):  # noqa: E501
 
     :param vol_name: CephFS volume name (filesystem)
     :type vol_name: str
-    :param subvol_name: 
+    :param subvol_name:
     :type subvol_name: str
-    :param group_name: 
+    :param group_name:
     :type group_name: str
 
     :rtype: Union[SubvolumeInfo, Tuple[SubvolumeInfo, int], Tuple[SubvolumeInfo, int, Dict[str, str]]
@@ -56,11 +56,11 @@ def subvolume_exists(vol_name, subvol_name, group_name=None):  # noqa: E501
 
      # noqa: E501
 
-    :param vol_name: 
+    :param vol_name:
     :type vol_name: str
-    :param subvol_name: 
+    :param subvol_name:
     :type subvol_name: str
-    :param group_name: 
+    :param group_name:
     :type group_name: str
 
     :rtype: Union[SubvolumeExists, Tuple[SubvolumeExists, int], Tuple[SubvolumeExists, int, Dict[str, str]]

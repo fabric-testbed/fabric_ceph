@@ -23,11 +23,12 @@
 #
 #
 # Author: Komal Thareja (kthare10@renci.org)
-
+import logging
 from typing import Dict, List, Optional, Tuple
 
 from fabric_ceph.common.config import Config
 from fabric_ceph.utils.dash_client import DashClient
+from fabric_ceph.utils.keyring_parser import keyring_minimal
 
 
 def list_users_first_success(
@@ -45,6 +46,7 @@ def list_users_first_success(
     Raises:
         RuntimeError if all clusters fail (with per-cluster error details).
     """
+    logger = logging.getLogger(cfg.logging.logger)
     clients: Dict[str, DashClient] = {name: DashClient.for_cluster(name, entry)
                                       for name, entry in cfg.cluster.items()}
 
@@ -54,6 +56,7 @@ def list_users_first_success(
             users = dc.list_users()
             return {"cluster": name, "users": users}
         except Exception as e:
+            logger.exception(f"Encountered exception while fetching users on {name}")
             errors[name] = str(e)
             continue
     raise RuntimeError(f"list_users failed on all clusters: {errors}")
@@ -62,6 +65,7 @@ def list_users_first_success(
 def export_users_first_success(
     cfg: Config,
     entities: List[str],
+    keyring_only: bool,
 ) -> Dict[str, object]:
     """
     Try to export the keyring(s) for 'entities' from each cluster in order,
@@ -80,6 +84,7 @@ def export_users_first_success(
         ValueError if entities is empty.
         RuntimeError if all clusters fail (with per-cluster error details).
     """
+    logger = logging.getLogger(cfg.logging.logger)
     if not entities:
         raise ValueError("entities must be a non-empty list")
 
@@ -88,25 +93,32 @@ def export_users_first_success(
     clients: Dict[str, DashClient] = {name: DashClient.for_cluster(name, entry)
                                       for name, entry in cfg.cluster.items()}
 
+    result = {}
+
     for name, dc in clients.items():
         try:
-            # Prefer a multi-entity export if your DashClient supports it
-            keyring_text: Optional[str] = None
-            export_many = getattr(dc, "export_users", None)
-            if callable(export_many):
-                keyring_text = export_many(entities)  # type: ignore[attr-defined]
-            else:
-                # Fallback: export each entity and concatenate
-                parts: List[str] = []
-                for ent in entities:
-                    parts.append(dc.export_keyring(ent))
-                # Normalize to a single blob; ensure trailing newline for keyring parsers
-                keyring_text = ("\n".join(p.strip() for p in parts)).strip() + "\n"
+            exported_entities = {}
+            for ent in entities:
+                try:
+                    keyring = dc.export_keyring(ent)
+                    exported_entities[ent] = keyring
+                    if keyring_only:
+                        logger.debug(f"Exported keyring {keyring}")
+                        key = keyring_minimal(keyring)
+                        if not key:
+                            raise RuntimeError("key not found in exported keyring")
+                        exported_entities[ent] = key
+                except Exception as e:
+                    errors[name] = str(e)
 
-            return {"cluster": name, "keyring": keyring_text}
-
+            result[name] = exported_entities
         except Exception as e:
+            logger.exception(f"Encountered exception while exporting users on {name}")
             errors[name] = str(e)
             continue
 
-    raise RuntimeError(f"export_users failed on all clusters: {errors}")
+    if len(errors) > 0 and len(result) == 0:
+        details = " ".join(f"{k}:{v}" for k, v in errors.items())
+        raise ValueError("No users were exported: {}".format(details))
+
+    return result

@@ -154,7 +154,36 @@ class DashClient:
             return
         r.raise_for_status()
 
-    def create_or_resize_subvolume(
+    def create_subvolume(
+        self,
+        fs_name: str,
+        subvol_name: str,
+        group_name: str | None = None,
+        size_bytes: int | None = None,
+        mode: str | None = None,
+    ) -> None:
+        """
+        PUT /cephfs/subvolume/{vol_name}
+        - If subvol doesn't exist -> create (mode honored if provided)
+        - If exists -> resize if size_bytes provided (mode ignored by server)
+        """
+        url = f"{self.base_api}/cephfs/subvolume"
+        payload = {"vol_name": fs_name, "subvol_name": subvol_name}
+        if group_name:
+            payload["group_name"] = group_name
+        if size_bytes is not None and int(size_bytes) > 0:
+            payload["size"] = int(size_bytes)
+        if mode:
+            payload["mode"] = str(mode)
+        r = requests.post(url, headers=self._hdrs(), json=payload, timeout=60, verify=self.verify_tls)
+        if r.status_code not in (200, 201, 202):
+            try:
+                detail = r.json()
+            except Exception:
+                detail = r.text
+            raise RuntimeError(f"[{self.cluster_name}] subvolume create/resize failed: {r.status_code} {detail}")
+
+    def resize_subvolume(
         self,
         fs_name: str,
         subvol_name: str,
@@ -224,7 +253,7 @@ class DashClient:
         DELETE /cephfs/subvolume/{vol_name}?subvol_name=&group_name=&force=
         """
         url = f"{self.base_api}/cephfs/subvolume/{fs_name}"
-        params = {"subvol_name": subvol_name, "force": str(bool(force)).lower()}
+        params = {"subvol_name": subvol_name}
         if group_name:
             params["group_name"] = group_name
         r = requests.delete(url, headers=self._hdrs(), params=params, timeout=60, verify=self.verify_tls)
@@ -234,3 +263,15 @@ class DashClient:
             except Exception:
                 detail = r.text
             raise RuntimeError(f"[{self.cluster_name}] subvolume delete failed: {r.status_code} {detail}")
+
+    def get_cluster_fsid(self) -> str:
+        r = requests.get(f"{self.base_api}/health/get_cluster_fsid",
+                         headers=self._hdrs(), timeout=60, verify=self.verify_tls)
+        r.raise_for_status()
+        return r.json() if isinstance(r.json(), str) else str(r.json())
+
+    def get_monitor_map(self) -> dict:
+        r = requests.get(f"{self.base_api}/monitor",
+                         headers=self._hdrs(), timeout=60, verify=self.verify_tls)
+        r.raise_for_status()
+        return r.json()

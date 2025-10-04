@@ -7,7 +7,7 @@ from flask import request, Response
 from fabric_ceph.openapi_server.models import Version, Status500InternalServerErrorErrors, Status500InternalServerError, \
     Status404NotFoundErrors, Status404NotFound, Status403ForbiddenErrors, Status403Forbidden, \
     Status401UnauthorizedErrors, Status401Unauthorized, Status400BadRequestErrors, Status400BadRequest, \
-    Status200OkNoContentData, Status200OkNoContent
+    Status200OkNoContentData, Status200OkNoContent, Users
 
 _INDENT = int(os.getenv('OC_API_JSON_RESPONSE_INDENT', '4'))
 
@@ -42,6 +42,7 @@ def cors_response(req: request, status_code: int = 200, body: object = None, x_e
     response.headers['Access-Control-Allow-Headers'] = \
         'DNT, User-Agent, X-Requested-With, If-Modified-Since, Cache-Control, Content-Type, Range, Authorization'
     response.headers['Access-Control-Expose-Headers'] = 'Content-Length, Content-Range, X-Error'
+    response.headers['Content-Type'] = 'application/json'
 
     if x_error:
         response.headers['X-Error'] = x_error
@@ -49,7 +50,7 @@ def cors_response(req: request, status_code: int = 200, body: object = None, x_e
     return response
 
 
-def cors_200(response_body: Union[Version] = None) -> Response:
+def cors_200(response_body: Union[Version, Users] = None) -> Response:
     """
     Return 200 - OK
     """

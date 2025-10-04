@@ -5,17 +5,19 @@ Ceph Manager Client (Python)
 
 Minimal, friendly wrapper for the FABRIC Ceph Manager service.
 
-New in this version
+Features
 - Token can be provided via `token` (string) or `token_file` (path to JSON or text file).
 - If the file is JSON, the field `id_token` is extracted by default (configurable via `token_key`).
 - Helper `refresh_token_from_file()` to re-read the file on demand.
 - Also supports environment variables: FABRIC_CEPH_TOKEN, FABRIC_CEPH_TOKEN_FILE.
+- X-Cluster routing header support.
+- Retries on transient errors; handles JSON and text responses.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import Any, Dict, List, Optional, Union
 from pathlib import Path
 import json
 import os
@@ -41,6 +43,7 @@ class ApiError(RuntimeError):
 @dataclass
 class CephManagerClient:
     base_url: str
+
     # Auth options (choose one):
     token: Optional[str] = None
     token_file: Optional[Union[str, Path]] = None
@@ -94,14 +97,13 @@ class CephManagerClient:
         if not self.token_file:
             raise ValueError("token_file is not set")
 
-        path = Path(self.token_file)
+        path = Path(self.token_file).expanduser()
         if not path.exists():
             raise FileNotFoundError(f"Token file not found: {path}")
 
         raw = path.read_text(encoding="utf-8").strip()
         try:
             obj = json.loads(raw)
-            # Use configured key; fall back to common alternatives if missing
             token = (
                 obj.get(self.token_key)
                 or obj.get("access_token")
@@ -150,16 +152,29 @@ class CephManagerClient:
         x_cluster: Optional[str] = None,
     ) -> Any:
         url = f"{self.base_url}{path if path.startswith('/') else '/' + path}"
-        resp = self._session.request(
-            method=method.upper(),
-            url=url,
-            params=params,
-            json=json,
-            data=data,
-            headers=self._headers(headers, x_cluster=x_cluster),
-            timeout=self.timeout,
-            verify=self.verify,
-        )
+
+        def _do():
+            return self._session.request(
+                method=method.upper(),
+                url=url,
+                params=params,
+                json=json,
+                data=data,
+                headers=self._headers(headers, x_cluster=x_cluster),
+                timeout=self.timeout,
+                verify=self.verify,
+            )
+
+        resp = _do()
+
+        # Optional: if token_file is configured and we got 401 once, refresh & retry once
+        if resp.status_code == 401 and self.token_file:
+            try:
+                self.refresh_token_from_file()
+                resp = _do()
+            except Exception:
+                pass
+
         if resp.status_code >= 400:
             # Try to parse structured error
             payload: Any
@@ -180,32 +195,92 @@ class CephManagerClient:
                 payload = resp.text
             raise ApiError(resp.status_code, url, message=message, payload=payload)
 
+        # Success path: return JSON if JSON; else plain text
         if self._is_json(resp):
             return resp.json()
         return resp.text
 
-    # --------------------- Cluster User ---------------------
+    # --------------------- Cluster info ---------------------
+
+    def list_cluster_info(self) -> Dict[str, Any]:
+        """
+        GET /cluster/info
+        Returns an envelope with `data` = list of per-cluster objects:
+          {
+            "cluster": "europe",
+            "fsid": "...",
+            "mons": [{"name":"mon.a","v2":"ip:3300/0","v1":"ip:6789/0"}, ...],
+            "mon_host": "[v2:...,v1:...] ...",
+            "ceph_conf_minimal": "[global]\\n\\tfsid = ...\\n\\tmon_host = ...\\n",
+            "error": null
+          }
+        """
+        return self._request("GET", "/cluster/info")
+
+    def cluster_minimal_confs(self) -> Dict[str, str]:
+        """
+        Convenience: returns {cluster_name: ceph_conf_minimal}.
+        If a cluster has an error or missing snippet, it is omitted from the map.
+        """
+        info = self.list_cluster_info()
+        out: Dict[str, str] = {}
+        items = (info or {}).get("data", []) if isinstance(info, dict) else []
+        for item in items:
+            if isinstance(item, dict) and not item.get("error"):
+                cluster = item.get("cluster")
+                conf = item.get("ceph_conf_minimal")
+                if cluster and isinstance(conf, str) and conf.strip():
+                    out[cluster] = conf
+        return out
+
+    # --------------------- Cluster User (templated, cross-cluster sync) ---------------------
+
+    def apply_user_templated(
+        self,
+        *,
+        user_entity: str,
+        template_capabilities: List[Dict[str, str]],
+        fs_name: str,
+        subvol_name: str,
+        group_name: Optional[str] = None,
+        sync_across_clusters: bool = True,
+        preferred_source: Optional[str] = None,
+        x_cluster: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """
+        POST /cluster/user (single, modern contract)
+
+        Body:
+          {
+            "user_entity": "...",
+            "template_capabilities": [ {"entity": "...", "cap": "allow rw fsname={fs} path={path}"}, ... ],
+            "render": { "fs_name": "...", "subvol_name": "...", "group_name": "..." },
+            "sync_across_clusters": true,
+            "preferred_source": "europe"
+          }
+        """
+        payload: Dict[str, Any] = {
+            "user_entity": user_entity,
+            "template_capabilities": template_capabilities,
+            "render": {
+                "fs_name": fs_name,
+                "subvol_name": subvol_name,
+            },
+            "sync_across_clusters": bool(sync_across_clusters),
+        }
+        if group_name:
+            payload["render"]["group_name"] = group_name
+        if preferred_source:
+            payload["preferred_source"] = preferred_source
+
+        return self._request("POST", "/cluster/user", json=payload, x_cluster=x_cluster)
+
+    # Convenience alias
+    upsert_user_templated = apply_user_templated
 
     def list_users(self, *, x_cluster: Optional[str] = None) -> Dict[str, Any]:
         """GET /cluster/user"""
         return self._request("GET", "/cluster/user", x_cluster=x_cluster)
-
-    def create_user(
-        self, user_entity: str, capabilities: List[Dict[str, str]], *, x_cluster: Optional[str] = None
-    ) -> Dict[str, Any]:
-        """POST /cluster/user"""
-        payload = {"user_entity": user_entity, "capabilities": capabilities}
-        return self._request("POST", "/cluster/user", json=payload, x_cluster=x_cluster)
-
-    def update_user(
-        self, user_entity: str, capabilities: List[Dict[str, str]], *, x_cluster: Optional[str] = None
-    ) -> Dict[str, Any]:
-        """
-        PUT /cluster/user
-        Server-side may perform 'upsert' (create if missing) depending on implementation.
-        """
-        payload = {"user_entity": user_entity, "capabilities": capabilities}
-        return self._request("PUT", "/cluster/user", json=payload, x_cluster=x_cluster)
 
     def delete_user(self, entity: str, *, x_cluster: Optional[str] = None) -> Dict[str, Any]:
         """DELETE /cluster/user/{entity}"""
@@ -226,11 +301,6 @@ class CephManagerClient:
         return str(res)
 
     # --------------------- CephFS (subvolumes) ---------------------
-
-    def create_subvolume_group(self, vol_name: str, group_name: str, *, x_cluster: Optional[str] = None) -> Dict[str, Any]:
-        """POST /cephfs/subvolume/group"""
-        payload = {"vol_name": vol_name, "group_name": group_name}
-        return self._request("POST", "/cephfs/subvolume/group", json=payload, x_cluster=x_cluster)
 
     def create_or_resize_subvolume(
         self,

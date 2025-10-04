@@ -5,11 +5,11 @@ import connexion
 
 from fabric_ceph.common.config import Config
 from fabric_ceph.common.globals import get_globals
-from fabric_ceph.openapi_server.models import SubvolumeInfo, SubvolumeExists
-from fabric_ceph.openapi_server.models.status200_ok_no_content import Status200OkNoContent  # noqa: E501
+from fabric_ceph.openapi_server.models import SubvolumeInfo, SubvolumeExists, Status200OkNoContentData, \
+    Status200OkNoContent
 from fabric_ceph.openapi_server.models.subvolume_create_or_resize_request import SubvolumeCreateOrResizeRequest  # noqa: E501
 from fabric_ceph.response.ceph_exception import CephException
-from fabric_ceph.response.cors_response import cors_401
+from fabric_ceph.response.cors_response import cors_401, cors_500
 from fabric_ceph.utils.utils import cors_success_response, cors_error_response, ordered_cluster_names, build_clients, \
     authorize
 from fabric_ceph.utils.ceph_fs_helper import ensure_subvolume_across_clusters, delete_subvolume_across_clusters
@@ -47,13 +47,21 @@ def create_or_resize_subvolume(vol_name, body):  # noqa: E501
                                                   subvol_name=subvolume_create_or_resize_request.subvol_name,
                                                   group_name=subvolume_create_or_resize_request.group_name,
                                                   size_bytes=subvolume_create_or_resize_request.size,  # 10 GiB; or None/0 for unlimited
-                                                  mode=body.mode,  # used only on create, safe to pass always
+                                                  mode=subvolume_create_or_resize_request.mode,  # used only on create, safe to pass always
                                                   #preferred_source="europe",
                                                   # optional
                                                   )
+        errors: dict = (result.get("errors") or {})
+        any_error = bool(errors)
+        if any_error:
+            details = " ".join(f"{k}:{v}" for k, v in errors.items())
+            return cors_500(details=details)
 
+        vol_info = Status200OkNoContentData()
+        vol_info.message = f"Subvolume {vol_name} created."
+        vol_info.details = result
         response = Status200OkNoContent()
-        response.data = [result]
+        response.data = [vol_info]
         response.size = len(response.data)
         response.status = 200
         response.type = 'no_content'
@@ -95,8 +103,17 @@ def delete_subvolume(vol_name, subvol_name, group_name=None, force=None):  # noq
                                                   group_name=group_name,
                                                   force=force)
 
+        errors: dict = (result.get("errors") or {})
+        any_error = bool(errors)
+        if any_error:
+            details = " ".join(f"{k}:{v}" for k, v in errors.items())
+            return cors_500(details=details)
+
+        vol_info = Status200OkNoContentData()
+        vol_info.message = f"Subvolume {vol_name} deleted."
+        vol_info.details = result
         response = Status200OkNoContent()
-        response.data = [result]
+        response.data = [vol_info]
         response.size = len(response.data)
         response.status = 200
         response.type = 'no_content'
@@ -124,27 +141,38 @@ def get_subvolume_info(vol_name, subvol_name, group_name=None):  # noqa: E501
     log = g.log
     try:
         fabric_token, is_operator, bastion_login = authorize()
-        if vol_name.lower() != bastion_login.lower():
+        if not is_operator and subvol_name.lower() != bastion_login.lower():
+            log.error(f"{fabric_token.uuid}/{fabric_token.email} is not authorized to access {vol_name}!")
             return cors_401(details=f"{fabric_token.uuid}/{fabric_token.email} is not authorized to access {vol_name}!")
 
         cfg: Config = g.config
         names = ordered_cluster_names(cfg)
         clients = build_clients(cfg, names)
 
+        clusters = {}
         errors: Dict[str, str] = {}
         for name, dc in clients:
             try:
                 js = dc.get_subvolume_info(vol_name, subvol_name, group_name)
-                # Convert to generated model (allows extra properties)
-                info = SubvolumeInfo().from_dict(js)
-                # Optional: include which cluster served the info
-                return cors_success_response(response_body=info)
+                clusters[name] = js
             except Exception as e:
                 errors[name] = str(e)
-                log.debug("get_subvolume_info failed on %s: %s", name, e)
+                log.exception("get_subvolume_info failed on %s: %s", name, e)
                 continue
 
+        if len(clusters):
+            vol_info = Status200OkNoContentData()
+            vol_info.message = f"Subvolume {vol_name} information retrieved."
+            vol_info.details = clusters
+            response = Status200OkNoContent()
+            response.data = [vol_info]
+            response.size = len(response.data)
+            response.status = 200
+            response.type = 'no_content'
+            return cors_success_response(response_body=response)
+
         # Nothing succeeded
+        log.error(f"Subvolume {subvol_name}/{group_name} on {vol_name} not found or info unavailable on any cluster")
         raise CephException("Subvolume not found or info unavailable on any cluster", http_error_code=NOT_FOUND)
     except Exception as e:
         g.log.exception(e)
@@ -186,7 +214,7 @@ def subvolume_exists(vol_name, subvol_name, group_name=None):  # noqa: E501
                 # If not on this cluster, keep trying others
             except Exception as e:
                 errors[name] = str(e)
-                log.debug("subvolume_exists check failed on %s: %s", name, e)
+                log.exception("subvolume_exists check failed on %s: %s", name, e)
                 continue
 
         # If we reach here, it wasn't found on any cluster (or all checks failed)

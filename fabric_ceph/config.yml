@@ -24,7 +24,7 @@ runtime:
 logging:
   ## The directory in which actor should create log files.
   ## This directory will be automatically created if it does not exist.
-  log-directory: logs #/var/log/ceph-mgr
+  log-directory: /var/log/ceph-mgr
 
   ## The filename to be used for actor's log file.
   log-file: ceph.log

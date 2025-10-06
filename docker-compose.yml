@@ -20,7 +20,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    image: ceph-mgr:1.9.0
+    image: kthare10/ceph-mgr:1.0.0
     container_name: ceph-mgr
     restart: always
     network_mode: host

@@ -26,56 +26,64 @@ def apply_user_templated(body: Dict, x_cluster=None):  # operationId: applyUserT
         if connexion.request.is_json:
             body = connexion.request.get_json()
 
-        user_entity = body["user_entity"]
-        tmpl_caps   = body["template_capabilities"]
-        render      = body["render"]
-        sync        = bool(body.get("sync_across_clusters", True))
-        preferred   = body.get("preferred_source")
+        user_entity   = body["user_entity"]
+        tmpl_caps     = body["template_capabilities"]
+        render_single = body.get("render")
+        render_multi  = body.get("renders")  # optional list
+        sync          = bool(body.get("sync_across_clusters", True))
+        preferred     = body.get("preferred_source")
 
-        # Preconditions (fail fast with 400)
+        # Validate template caps
         if not tmpl_caps or not isinstance(tmpl_caps, list):
             log.error("template_capabilities must be a non-empty list")
             return cors_400(details="template_capabilities must be a non-empty list")
-        if not render or "fs_name" not in render or "subvol_name" not in render:
+
+        # Normalize render context: support either 'render' (dict) or 'renders' (list)
+        if render_single and isinstance(render_single, dict):
+            ctx = render_single
+        elif render_multi and isinstance(render_multi, list) and len(render_multi) > 0:
+            # TEMP: consume the first context until multi-path server support is implemented
+            ctx = render_multi[0]
+            log.warning("Received 'renders' list; using the first item for now. "
+                        "Add a multi-path helper to apply all contexts.")
+        else:
+            log.error("render or renders[] is required")
+            return cors_400(details="Either 'render' (object) or 'renders' (non-empty list) is required")
+
+        # Validate ctx
+        if "fs_name" not in ctx or "subvol_name" not in ctx:
             log.error("render.fs_name and render.subvol_name are required")
             return cors_400(details="render.fs_name and render.subvol_name are required")
 
         cfg = g.config
 
-        # Reuse your existing helper; it already does: render caps per cluster,
-        # update/create on source, export keyring, import everywhere, overwrite caps.
-        # We also capture the per-cluster resolved paths.
+        # Apply using the existing single-context helper
         summary = ensure_user_across_clusters_with_cluster_paths(
             cfg=cfg,
             user_entity=user_entity,
             base_capabilities=tmpl_caps,
-            fs_name=render["fs_name"],
-            subvol_name=render["subvol_name"],
-            group_name=render.get("group_name"),
+            fs_name=ctx["fs_name"],
+            subvol_name=ctx["subvol_name"],
+            group_name=ctx.get("group_name"),
             preferred_source=preferred,
         )
 
         errors: dict = (summary.get("errors") or {})
-        any_error = bool(errors)
-        if any_error:
+        if errors:
             details = " ".join(f"{k}:{v}" for k, v in errors.items())
-            log.error(f"Failed to apply templated error: {details}")
+            log.error(f"Failed to apply templated: {details}")
             return cors_500(details=details)
 
-
-        log.debug("Successfully applied templated user")
-        # 200 OK with ApplyUserResponse schema
         response = ApplyUserResponse.from_dict({
             "user_entity": user_entity,
-            "fs_name": render["fs_name"],
-            "subvol_name": render["subvol_name"],
-            "group_name": render.get("group_name"),
+            "fs_name": ctx["fs_name"],
+            "subvol_name": ctx["subvol_name"],
+            "group_name": ctx.get("group_name"),
             "source_cluster": summary.get("source_cluster"),
             "created_on_source": summary.get("created_on_source"),
             "updated_on_source": summary.get("updated_on_source"),
             "imported_to": summary.get("imported_to", []),
             "caps_applied": summary.get("caps_applied", {}),
-            # Optional: include resolved paths if your helper returns them
             "paths": summary.get("paths", {}),
             "errors": summary.get("errors", {}),
         })
@@ -174,38 +182,25 @@ def export_users(body):  # noqa: E501
         log.exception(f"Failed processing CephX export request: {e}")
         return cors_error_response(error=e)
 
-def list_users():  # noqa: E501
-    """List all CephX users
-
-     # noqa: E501
-
-
-    :rtype: Union[Users, Tuple[Users, int], Tuple[Users, int, Dict[str, str]]
-    """
-    globals = get_globals()
-    log = globals.log
+def list_users():
+    g = get_globals()
+    log = g.log
     log.debug("Processing CephX list request")
-
     try:
         fabric_token, is_operator, bastion_login = authorize()
         if not is_operator:
             return cors_401(details=f"{fabric_token.uuid}/{fabric_token.email} is not authorized!")
 
-        cfg = globals.config
-        result = list_users_first_success(cfg=cfg)
-        log.debug(f"Updated CephX list users: {result}")
+        result = list_users_first_success(cfg=g.config)  # {"cluster": "...", "users": [...]}
+        raw_users = result.get("users", [])
+        users = [CephUser.from_dict(u) for u in raw_users]
 
-        users = []
-        for user in result:
-            user = CephUser.from_dict(user)
-            users.append(user)
-
-        response = Users()
-        response.data = [users]
-        response.size = len(response.data)
-        response.status = 200
-        response.type = 'no_content'
-        return cors_200(response_body=response)
+        resp = Users()
+        resp.data = users
+        resp.size = len(users)
+        resp.status = 200
+        resp.type = "users"
+        return cors_200(response_body=resp)
     except Exception as e:
         log.exception(f"Failed processing CephX list request: {e}")
         return cors_error_response(error=e)

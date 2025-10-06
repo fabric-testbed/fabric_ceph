@@ -23,7 +23,6 @@
 #
 #
 # Author: Komal Thareja (kthare10@renci.org)
-import logging
 import time
 import traceback
 from json import encoder
@@ -49,10 +48,11 @@ def main():
             # start swagger
             app = connexion.App(__name__, specification_dir='openapi_server/openapi/')
             app.json = encoder.JSONEncoder
-            app.add_api('openapi.yaml', arguments={'title': 'Fabric CEPH API'}, pythonic_params=True)
+            app.add_api('openapi.yaml', arguments={'title': 'Fabric CEPH API'},
+                        pythonic_params=True, base_path='/')
 
             # Start up the server to expose the metrics.
-            waitress.serve(app, port=int(port), threads=8)
+            waitress.serve(app.app, port=int(port), threads=8, expose_tracebacks=True)
 
             while True:
                 time.sleep(0.0001)

@@ -24,7 +24,7 @@ class TestClusterUserController(BaseTestCase):
 
         Upsert a CephX user with cluster-specific capabilities
         """
-        create_user_templated_request = {"user_entity":"client.project123","preferred_source":"europe","template_capabilities":[{"cap":"allow rw fsname={fs} path={path}","entity":"mds"},{"cap":"allow rw fsname={fs} path={path}","entity":"mds"}],"render":{"subvol_name":"project123","group_name":"fabric_staff","fs_name":"CEPH-FS-01"},"sync_across_clusters":True}
+        create_user_templated_request = {"user_entity":"client.project123","renders":[{"subvol_name":"project123","group_name":"fabric_staff","fs_name":"CEPH-FS-01"},{"subvol_name":"project123","group_name":"fabric_staff","fs_name":"CEPH-FS-01"}],"preferred_source":"europe","template_capabilities":[{"cap":"allow rw fsname={fs} path={path}","entity":"mds"},{"cap":"allow rw fsname={fs} path={path}","entity":"mds"}],"sync_across_clusters":True}
         headers = { 
             'Accept': 'application/json',
             'Content-Type': 'application/json',

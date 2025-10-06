@@ -876,17 +876,19 @@ components:
         template_capabilities:
           type: array
           items: { $ref: '#/components/schemas/CapabilityTemplate' }
-        render:
-          $ref: '#/components/schemas/CapRenderContext'
+        # NEW multi-target form
+        renders:
+          type: array
+          minItems: 1
+          items: { $ref: '#/components/schemas/CapRenderContext' }
+          description: >
+            Multiple subvolumes (possibly in different groups). Server will expand the MDS
+            template for each context and merge them into one 'mds' cap string using commas.
         sync_across_clusters:
           type: boolean
           default: true
-          description: >
-            If true, export key from a source cluster and import to others so the same secret is used everywhere;
-            then overwrite caps on each cluster with its rendered (path-aware) caps.
         preferred_source:
           type: string
-          nullable: true
           example: europe
           description: Preferred source cluster when user doesn't already exist.
 

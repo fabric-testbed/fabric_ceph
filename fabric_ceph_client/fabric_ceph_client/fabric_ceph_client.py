@@ -17,7 +17,7 @@ Features
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Dict, List, Optional, Union, Tuple
 from pathlib import Path
 import json
 import os
@@ -236,25 +236,38 @@ class CephManagerClient:
     # --------------------- Cluster User (templated, cross-cluster sync) ---------------------
 
     def apply_user_templated(
-        self,
-        *,
-        user_entity: str,
-        template_capabilities: List[Dict[str, str]],
-        fs_name: str,
-        subvol_name: str,
-        group_name: Optional[str] = None,
-        sync_across_clusters: bool = True,
-        preferred_source: Optional[str] = None,
-        x_cluster: Optional[str] = None,
+            self,
+            *,
+            user_entity: str,
+            template_capabilities: List[Dict[str, str]],
+            fs_name: Optional[str] = None,
+            subvol_name: Optional[str] = None,
+            group_name: Optional[str] = None,
+            # NEW:
+            renders: Optional[List[Dict[str, str]]] = None,
+            extra_subs: Optional[Dict[str, str]] = None,
+            merge_strategy: Optional[str] = None,  # e.g. "comma", "multi", "auto"
+            dry_run: bool = False,
+            sync_across_clusters: bool = True,
+            preferred_source: Optional[str] = None,
+            x_cluster: Optional[str] = None,
     ) -> Dict[str, Any]:
         """
-        POST /cluster/user (single, modern contract)
+        POST /cluster/user
 
-        Body:
+        Body (compat: either 'render' OR 'renders'):
           {
             "user_entity": "...",
-            "template_capabilities": [ {"entity": "...", "cap": "allow rw fsname={fs} path={path}"}, ... ],
-            "render": { "fs_name": "...", "subvol_name": "...", "group_name": "..." },
+            "template_capabilities": [
+              {"entity": "mon", "cap": "allow r"},
+              {"entity": "mds", "cap": "allow rw fsname={fs} path={path}"},
+              {"entity": "osd", "cap": "allow rw tag cephfs data={fs}"}
+            ],
+            "render":  { "fs_name": "...", "subvol_name": "...", "group_name": "..." },
+            "renders": [ { "fs_name": "...", "subvol_name": "...", "group_name": "..." }, ... ],
+            "extra_subs": { "project": "p123" },
+            "merge_strategy": "comma",
+            "dry_run": false,
             "sync_across_clusters": true,
             "preferred_source": "europe"
           }
@@ -262,21 +275,70 @@ class CephManagerClient:
         payload: Dict[str, Any] = {
             "user_entity": user_entity,
             "template_capabilities": template_capabilities,
-            "render": {
-                "fs_name": fs_name,
-                "subvol_name": subvol_name,
-            },
             "sync_across_clusters": bool(sync_across_clusters),
+            "dry_run": bool(dry_run),
         }
-        if group_name:
-            payload["render"]["group_name"] = group_name
+
+        # Back-compat single-render (if renders not provided)
+        if renders and len(renders) > 0:
+            # normalize items to only allowed keys
+            norm = []
+            for rc in renders:
+                item = {
+                    "fs_name": rc["fs_name"],
+                    "subvol_name": rc["subvol_name"],
+                }
+                if rc.get("group_name"):
+                    item["group_name"] = rc["group_name"]
+                norm.append(item)
+            payload["renders"] = norm
+        else:
+            if not fs_name or not subvol_name:
+                raise ValueError("Either (fs_name & subvol_name) or 'renders' must be provided")
+            payload["render"] = {"fs_name": fs_name, "subvol_name": subvol_name}
+            if group_name:
+                payload["render"]["group_name"] = group_name
+
         if preferred_source:
             payload["preferred_source"] = preferred_source
+        if extra_subs:
+            payload["extra_subs"] = extra_subs
+        if merge_strategy:
+            payload["merge_strategy"] = merge_strategy  # server-defined strategies
 
         return self._request("POST", "/cluster/user", json=payload, x_cluster=x_cluster)
 
-    # Convenience alias
-    upsert_user_templated = apply_user_templated
+    def apply_user_for_multiple_subvols(
+            self,
+            *,
+            user_entity: str,
+            template_capabilities: List[Dict[str, str]],
+            contexts: List[Tuple[str, str, Optional[str]]],  # (fs_name, subvol_name, group_name)
+            sync_across_clusters: bool = True,
+            preferred_source: Optional[str] = None,
+            merge_strategy: Optional[str] = "comma",
+            dry_run: bool = False,
+            x_cluster: Optional[str] = None,
+            extra_subs: Optional[Dict[str, str]] = None,
+    ) -> Dict[str, Any]:
+        renders = []
+        for fs_name, subvol_name, group_name in contexts:
+            item = {"fs_name": fs_name, "subvol_name": subvol_name}
+            if group_name:
+                item["group_name"] = group_name
+            renders.append(item)
+
+        return self.apply_user_templated(
+            user_entity=user_entity,
+            template_capabilities=template_capabilities,
+            renders=renders,
+            extra_subs=extra_subs,
+            merge_strategy=merge_strategy,
+            dry_run=dry_run,
+            sync_across_clusters=sync_across_clusters,
+            preferred_source=preferred_source,
+            x_cluster=x_cluster,
+        )
 
     def list_users(self, *, x_cluster: Optional[str] = None) -> Dict[str, Any]:
         """GET /cluster/user"""

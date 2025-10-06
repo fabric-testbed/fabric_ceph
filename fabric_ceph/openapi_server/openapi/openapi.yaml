@@ -1074,16 +1074,19 @@ components:
     CreateUserTemplatedRequest:
       example:
         user_entity: client.project123
+        renders:
+        - subvol_name: project123
+          group_name: fabric_staff
+          fs_name: CEPH-FS-01
+        - subvol_name: project123
+          group_name: fabric_staff
+          fs_name: CEPH-FS-01
         preferred_source: europe
         template_capabilities:
         - cap: "allow rw fsname={fs} path={path}"
           entity: mds
         - cap: "allow rw fsname={fs} path={path}"
           entity: mds
-        render:
-          subvol_name: project123
-          group_name: fabric_staff
-          fs_name: CEPH-FS-01
         sync_across_clusters: true
       properties:
         user_entity:
@@ -1095,18 +1098,21 @@ components:
             $ref: "#/components/schemas/CapabilityTemplate"
           title: template_capabilities
           type: array
-        render:
-          $ref: "#/components/schemas/CapRenderContext"
+        renders:
+          description: |
+            Multiple subvolumes (possibly in different groups). Server will expand the MDS template for each context and merge them into one 'mds' cap string using commas.
+          items:
+            $ref: "#/components/schemas/CapRenderContext"
+          minItems: 1
+          title: renders
+          type: array
         sync_across_clusters:
           default: true
-          description: |
-            If true, export key from a source cluster and import to others so the same secret is used everywhere; then overwrite caps on each cluster with its rendered (path-aware) caps.
           title: sync_across_clusters
           type: boolean
         preferred_source:
           description: Preferred source cluster when user doesn't already exist.
           example: europe
-          nullable: true
           title: preferred_source
           type: string
       required:

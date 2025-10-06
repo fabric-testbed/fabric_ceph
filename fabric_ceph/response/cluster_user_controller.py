@@ -209,3 +209,10 @@ def list_users():  # noqa: E501
     except Exception as e:
         log.exception(f"Failed processing CephX list request: {e}")
         return cors_error_response(error=e)
+
+
+if __name__ == "__main__":
+
+    temp = {'entity': 'client.ceph-exporter.hawi-osd', 'caps': {'mgr': 'allow r', 'mon': 'profile ceph-exporter', 'osd': 'allow r'}, 'key': '***********'}
+    abc = CephUser.from_dict(temp)
+    print(abc.to_dict())

@@ -424,25 +424,6 @@ paths:
           application/json:
             schema:
               $ref: '#/components/schemas/CreateUserTemplatedRequest'
-            examples:
-              projectUser:
-                value:
-                  user_entity: client.project123
-                  template_capabilities:
-                    - entity: mon
-                      cap: "allow r"
-                    - entity: mds
-                      cap: "allow rw fsname={fs} path={path}"
-                    - entity: osd
-                      cap: "allow rw tag cephfs data={fs}"
-                    - entity: osd
-                      cap: "allow rw tag cephfs metadata={fs}"
-                  render:
-                    fs_name: CEPH-FS-01
-                    subvol_name: project123
-                    group_name: fabric_staff
-                  sync_across_clusters: true
-                  preferred_source: europe
       responses:
         "200":
           description: Summary of synchronization results and per-cluster applied caps

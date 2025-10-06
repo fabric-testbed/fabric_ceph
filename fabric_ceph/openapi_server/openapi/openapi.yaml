@@ -1116,7 +1116,7 @@ components:
           title: preferred_source
           type: string
       required:
-      - render
+      - renders
       - template_capabilities
       - user_entity
       title: CreateUserTemplatedRequest

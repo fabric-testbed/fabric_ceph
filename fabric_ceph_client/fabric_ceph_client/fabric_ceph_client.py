@@ -255,58 +255,42 @@ class CephManagerClient:
         """
         POST /cluster/user
 
-        Body (compat: either 'render' OR 'renders'):
-          {
-            "user_entity": "...",
-            "template_capabilities": [
-              {"entity": "mon", "cap": "allow r"},
-              {"entity": "mds", "cap": "allow rw fsname={fs} path={path}"},
-              {"entity": "osd", "cap": "allow rw tag cephfs data={fs}"}
-            ],
-            "render":  { "fs_name": "...", "subvol_name": "...", "group_name": "..." },
-            "renders": [ { "fs_name": "...", "subvol_name": "...", "group_name": "..." }, ... ],
-            "extra_subs": { "project": "p123" },
-            "merge_strategy": "comma",
-            "dry_run": false,
-            "sync_across_clusters": true,
-            "preferred_source": "europe"
-          }
+        Always sends `renders` (array). If only a single context is provided
+        via (fs_name, subvol_name, group_name), it is normalized to a one-item list.
         """
-        payload: Dict[str, Any] = {
-            "user_entity": user_entity,
-            "template_capabilities": template_capabilities,
-            "sync_across_clusters": bool(sync_across_clusters),
-            "dry_run": bool(dry_run),
-        }
-
-        # Back-compat single-render (if renders not provided)
+        # Normalize to renders list
         if renders and len(renders) > 0:
-            # normalize items to only allowed keys
             norm = []
             for rc in renders:
-                item = {
-                    "fs_name": rc["fs_name"],
-                    "subvol_name": rc["subvol_name"],
-                }
+                item = {"fs_name": rc["fs_name"], "subvol_name": rc["subvol_name"]}
                 if rc.get("group_name"):
                     item["group_name"] = rc["group_name"]
                 norm.append(item)
-            payload["renders"] = norm
+            renders_norm = norm
         else:
             if not fs_name or not subvol_name:
-                raise ValueError("Either (fs_name & subvol_name) or 'renders' must be provided")
-            payload["render"] = {"fs_name": fs_name, "subvol_name": subvol_name}
+                raise ValueError("Provide either 'renders' (list) or fs_name+subvol_name")
+            item = {"fs_name": fs_name, "subvol_name": subvol_name}
             if group_name:
-                payload["render"]["group_name"] = group_name
+                item["group_name"] = group_name
+            renders_norm = [item]
 
+        payload: Dict[str, Any] = {
+            "user_entity": user_entity,
+            "template_capabilities": template_capabilities,
+            "renders": renders_norm,                         # <— always array
+            "sync_across_clusters": bool(sync_across_clusters),
+            "dry_run": bool(dry_run),
+        }
         if preferred_source:
             payload["preferred_source"] = preferred_source
         if extra_subs:
             payload["extra_subs"] = extra_subs
         if merge_strategy:
-            payload["merge_strategy"] = merge_strategy  # server-defined strategies
+            payload["merge_strategy"] = merge_strategy
 
         return self._request("POST", "/cluster/user", json=payload, x_cluster=x_cluster)
+
 
     def apply_user_for_multiple_subvols(
             self,
@@ -322,16 +306,16 @@ class CephManagerClient:
             extra_subs: Optional[Dict[str, str]] = None,
     ) -> Dict[str, Any]:
         renders = []
-        for fs_name, subvol_name, group_name in contexts:
+        for fs_name, subvol_name, group in contexts:
             item = {"fs_name": fs_name, "subvol_name": subvol_name}
-            if group_name:
-                item["group_name"] = group_name
+            if group:
+                item["group_name"] = group
             renders.append(item)
 
         return self.apply_user_templated(
             user_entity=user_entity,
             template_capabilities=template_capabilities,
-            renders=renders,
+            renders=renders,                     # <— pass array
             extra_subs=extra_subs,
             merge_strategy=merge_strategy,
             dry_run=dry_run,
@@ -339,6 +323,7 @@ class CephManagerClient:
             preferred_source=preferred_source,
             x_cluster=x_cluster,
         )
+
 
     def list_users(self, *, x_cluster: Optional[str] = None) -> Dict[str, Any]:
         """GET /cluster/user"""

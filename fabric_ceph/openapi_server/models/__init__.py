@@ -27,7 +27,6 @@ from fabric_ceph.openapi_server.models.status500_internal_server_error import St
 from fabric_ceph.openapi_server.models.status500_internal_server_error_errors import Status500InternalServerErrorErrors
 from fabric_ceph.openapi_server.models.subvolume_create_or_resize_request import SubvolumeCreateOrResizeRequest
 from fabric_ceph.openapi_server.models.subvolume_exists import SubvolumeExists
-from fabric_ceph.openapi_server.models.subvolume_info import SubvolumeInfo
 from fabric_ceph.openapi_server.models.users import Users
 from fabric_ceph.openapi_server.models.version import Version
 from fabric_ceph.openapi_server.models.version_data import VersionData

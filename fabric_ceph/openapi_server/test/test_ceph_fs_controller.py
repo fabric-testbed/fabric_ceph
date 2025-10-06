@@ -2,16 +2,16 @@ import unittest
 
 from flask import json
 
-from fabric_ceph.openapi_server.models.status200_ok_no_content import Status200OkNoContent  # noqa: E501
-from fabric_ceph.openapi_server.models.status400_bad_request import Status400BadRequest  # noqa: E501
-from fabric_ceph.openapi_server.models.status401_unauthorized import Status401Unauthorized  # noqa: E501
-from fabric_ceph.openapi_server.models.status403_forbidden import Status403Forbidden  # noqa: E501
-from fabric_ceph.openapi_server.models.status404_not_found import Status404NotFound  # noqa: E501
-from fabric_ceph.openapi_server.models.status500_internal_server_error import Status500InternalServerError  # noqa: E501
-from fabric_ceph.openapi_server.models.subvolume_create_or_resize_request import SubvolumeCreateOrResizeRequest  # noqa: E501
-from fabric_ceph.openapi_server.models.subvolume_exists import SubvolumeExists  # noqa: E501
-from fabric_ceph.openapi_server.models.subvolume_info import SubvolumeInfo  # noqa: E501
-from fabric_ceph.openapi_server.test import BaseTestCase
+from fabric_ceph.fabric_ceph.openapi_server.models.status200_ok_no_content import Status200OkNoContent  # noqa: E501
+from fabric_ceph.fabric_ceph.openapi_server.models.status400_bad_request import Status400BadRequest  # noqa: E501
+from fabric_ceph.fabric_ceph.openapi_server.models.status401_unauthorized import Status401Unauthorized  # noqa: E501
+from fabric_ceph.fabric_ceph.openapi_server.models.status403_forbidden import Status403Forbidden  # noqa: E501
+from fabric_ceph.fabric_ceph.openapi_server.models.status404_not_found import Status404NotFound  # noqa: E501
+from fabric_ceph.fabric_ceph.openapi_server.models.status500_internal_server_error import Status500InternalServerError  # noqa: E501
+from fabric_ceph.fabric_ceph.openapi_server.models.subvolume_create_or_resize_request import SubvolumeCreateOrResizeRequest  # noqa: E501
+from fabric_ceph.fabric_ceph.openapi_server.models.subvolume_exists import SubvolumeExists  # noqa: E501
+from fabric_ceph.fabric_ceph.openapi_server.models.subvolume_info import SubvolumeInfo  # noqa: E501
+from fabric_ceph.fabric_ceph.openapi_server.test import BaseTestCase
 
 
 class TestCephFSController(BaseTestCase):
@@ -23,6 +23,7 @@ class TestCephFSController(BaseTestCase):
         Create or resize a subvolume
         """
         subvolume_create_or_resize_request = {"subvol_name":"subvol_name","mode":"0777","size":10737418240,"group_name":"group_name"}
+        query_string = [('cluster', 'europe')]
         headers = { 
             'Accept': 'application/json',
             'Content-Type': 'application/json',
@@ -33,7 +34,8 @@ class TestCephFSController(BaseTestCase):
             method='PUT',
             headers=headers,
             data=json.dumps(subvolume_create_or_resize_request),
-            content_type='application/json')
+            content_type='application/json',
+            query_string=query_string)
         self.assert200(response,
                        'Response body is : ' + response.data.decode('utf-8'))
 
@@ -42,7 +44,8 @@ class TestCephFSController(BaseTestCase):
 
         Delete a subvolume
         """
-        query_string = [('subvol_name', 'subvol_name_example'),
+        query_string = [('cluster', 'europe'),
+                        ('subvol_name', 'subvol_name_example'),
                         ('group_name', 'group_name_example'),
                         ('force', False)]
         headers = { 
@@ -62,7 +65,8 @@ class TestCephFSController(BaseTestCase):
 
         Get subvolume info (path)
         """
-        query_string = [('subvol_name', 'subvol_name_example'),
+        query_string = [('cluster', 'europe'),
+                        ('subvol_name', 'subvol_name_example'),
                         ('group_name', 'group_name_example')]
         headers = { 
             'Accept': 'application/json',
@@ -81,7 +85,8 @@ class TestCephFSController(BaseTestCase):
 
         Check whether a subvolume exists
         """
-        query_string = [('subvol_name', 'subvol_name_example'),
+        query_string = [('cluster', 'europe'),
+                        ('subvol_name', 'subvol_name_example'),
                         ('group_name', 'group_name_example')]
         headers = { 
             'Accept': 'application/json',

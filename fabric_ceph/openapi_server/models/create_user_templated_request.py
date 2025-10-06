@@ -129,6 +129,8 @@ class CreateUserTemplatedRequest(Model):
         :param renders: The renders of this CreateUserTemplatedRequest.
         :type renders: List[CapRenderContext]
         """
+        if renders is None:
+            raise ValueError("Invalid value for `renders`, must not be `None`")  # noqa: E501
         if renders is not None and len(renders) < 1:
             raise ValueError("Invalid value for `renders`, number of items must be greater than or equal to `1`")  # noqa: E501
 

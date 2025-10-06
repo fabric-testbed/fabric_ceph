@@ -38,6 +38,7 @@ paths:
       security:
         - bearerAuth: []
       parameters:
+        - $ref: '#/components/parameters/clusterParam'
         - in: path
           name: vol_name
           required: true
@@ -118,6 +119,7 @@ paths:
       security:
         - bearerAuth: []
       parameters:
+        - $ref: '#/components/parameters/clusterParam'
         - in: path
           name: vol_name
           required: true
@@ -188,6 +190,7 @@ paths:
       security:
         - bearerAuth: []
       parameters:
+        - $ref: '#/components/parameters/clusterParam'
         - in: path
           name: vol_name
           required: true
@@ -210,7 +213,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/SubvolumeInfo'
+                $ref: '#/components/schemas/status_200_ok_no_content'
         "400":
           description: Bad Request
           content:
@@ -250,6 +253,8 @@ paths:
       security:
         - bearerAuth: []
       parameters:
+        - $ref: '#/components/parameters/clusterParam'
+
         - in: path
           name: vol_name
           required: true
@@ -360,6 +365,8 @@ paths:
       operationId: listUsers
       security:
         - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/clusterParam'
       responses:
         "200":
           description: OK
@@ -409,15 +416,7 @@ paths:
       security:
         - bearerAuth: []
       parameters:
-        - in: header
-          name: X-Cluster
-          required: false
-          schema:
-            type: string
-            example: "europe,lab"
-          description: >
-            Optional cluster try-order/scope hint. Server still syncs to all configured clusters
-            unless restricted by deployment policy.
+        - $ref: '#/components/parameters/clusterParam'
       requestBody:
         required: true
         content:
@@ -470,6 +469,7 @@ paths:
       security:
         - bearerAuth: []
       parameters:
+        - $ref: '#/components/parameters/clusterParam'
         - in: path
           name: entity
           required: true
@@ -521,6 +521,8 @@ paths:
       operationId: exportUsers
       security:
         - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/clusterParam'
       requestBody:
         required: true
         content:
@@ -609,6 +611,16 @@ paths:
                 $ref: '#/components/schemas/status_500_internal_server_error'
 
 components:
+  parameters:
+    clusterParam:
+      name: cluster
+      in: query
+      required: true
+      description: Target cluster/region identifier as defined by the service config.
+      schema:
+        type: string
+        example: europe
+
   securitySchemes:
     bearerAuth:
       type: http
@@ -759,7 +771,7 @@ components:
           type: string
           default: No Content
         details:
-          type: string
+          type: object
       example:
         details: details
         message: No Content
@@ -849,7 +861,7 @@ components:
 
     CreateUserTemplatedRequest:
       type: object
-      required: [user_entity, template_capabilities, render]
+      required: [user_entity, template_capabilities, renders]
       properties:
         user_entity:
           type: string
@@ -1036,26 +1048,6 @@ components:
             POSIX mode string for initial create (octal), e.g. `"0777"`. Ignored on resize.
           pattern: "^[0-7]{3,4}$"
           example: "0777"
-
-    SubvolumeInfo:
-      type: object
-      additionalProperties: true
-      properties:
-        path:
-          type: string
-          description: Absolute CephFS path to the subvolume (use for mounting)
-        bytes_quota:
-          type: integer
-          format: int64
-        mode:
-          type: string
-          example: "0777"
-        state:
-          type: string
-          example: complete
-        created_at:
-          type: string
-          format: date-time
 
     SubvolumeExists:
       type: object

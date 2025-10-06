@@ -26,6 +26,15 @@ paths:
     delete:
       operationId: delete_subvolume
       parameters:
+      - description: Target cluster/region identifier as defined by the service config.
+        explode: true
+        in: query
+        name: cluster
+        required: true
+        schema:
+          example: europe
+          type: string
+        style: form
       - description: CephFS volume name (filesystem)
         explode: false
         in: path
@@ -106,6 +115,15 @@ paths:
         Creates a new subvolume (if it does not exist) or resizes an existing one. Omit `size` to create without a quota (unlimited). Send `size` (bytes) to set/resize the quota.
       operationId: create_or_resize_subvolume
       parameters:
+      - description: Target cluster/region identifier as defined by the service config.
+        explode: true
+        in: query
+        name: cluster
+        required: true
+        schema:
+          example: europe
+          type: string
+        style: form
       - description: "CephFS volume name (filesystem), e.g. `CEPH-FS-01`"
         explode: false
         in: path
@@ -190,6 +208,15 @@ paths:
     get:
       operationId: subvolume_exists
       parameters:
+      - description: Target cluster/region identifier as defined by the service config.
+        explode: true
+        in: query
+        name: cluster
+        required: true
+        schema:
+          example: europe
+          type: string
+        style: form
       - explode: false
         in: path
         name: vol_name
@@ -254,6 +281,15 @@ paths:
         (equivalent to `getpath`).
       operationId: get_subvolume_info
       parameters:
+      - description: Target cluster/region identifier as defined by the service config.
+        explode: true
+        in: query
+        name: cluster
+        required: true
+        schema:
+          example: europe
+          type: string
+        style: form
       - description: CephFS volume name (filesystem)
         explode: false
         in: path
@@ -281,7 +317,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/SubvolumeInfo"
+                $ref: "#/components/schemas/status_200_ok_no_content"
           description: OK
         "400":
           content:
@@ -362,6 +398,16 @@ paths:
   /cluster/user:
     get:
       operationId: list_users
+      parameters:
+      - description: Target cluster/region identifier as defined by the service config.
+        explode: true
+        in: query
+        name: cluster
+        required: true
+        schema:
+          example: europe
+          type: string
+        style: form
       responses:
         "200":
           content:
@@ -410,38 +456,18 @@ paths:
         Creates or updates a CephX user and synchronizes the SAME SECRET across all clusters. Capability strings may include placeholders `{fs}`, `{path}`, `{group}`, `{subvol}` which are rendered per cluster using subvolume info (getpath).
       operationId: apply_user_templated
       parameters:
-      - description: |
-          Optional cluster try-order/scope hint. Server still syncs to all configured clusters unless restricted by deployment policy.
-        explode: false
-        in: header
-        name: X-Cluster
-        required: false
+      - description: Target cluster/region identifier as defined by the service config.
+        explode: true
+        in: query
+        name: cluster
+        required: true
         schema:
-          example: "europe,lab"
+          example: europe
           type: string
-        style: simple
+        style: form
       requestBody:
         content:
           application/json:
-            examples:
-              projectUser:
-                value:
-                  user_entity: client.project123
-                  template_capabilities:
-                  - entity: mon
-                    cap: allow r
-                  - entity: mds
-                    cap: "allow rw fsname={fs} path={path}"
-                  - entity: osd
-                    cap: "allow rw tag cephfs data={fs}"
-                  - entity: osd
-                    cap: "allow rw tag cephfs metadata={fs}"
-                  render:
-                    fs_name: CEPH-FS-01
-                    subvol_name: project123
-                    group_name: fabric_staff
-                  sync_across_clusters: true
-                  preferred_source: europe
             schema:
               $ref: "#/components/schemas/CreateUserTemplatedRequest"
         required: true
@@ -492,6 +518,16 @@ paths:
   /cluster/user/export:
     post:
       operationId: export_users
+      parameters:
+      - description: Target cluster/region identifier as defined by the service config.
+        explode: true
+        in: query
+        name: cluster
+        required: true
+        schema:
+          example: europe
+          type: string
+        style: form
       requestBody:
         content:
           application/json:
@@ -590,6 +626,15 @@ paths:
     delete:
       operationId: delete_user
       parameters:
+      - description: Target cluster/region identifier as defined by the service config.
+        explode: true
+        in: query
+        name: cluster
+        required: true
+        schema:
+          example: europe
+          type: string
+        style: form
       - description: "CephX entity, e.g., `client.demo`"
         explode: false
         in: path
@@ -663,6 +708,17 @@ paths:
       - version
       x-openapi-router-controller: fabric_ceph.openapi_server.controllers.version_controller
 components:
+  parameters:
+    clusterParam:
+      description: Target cluster/region identifier as defined by the service config.
+      explode: true
+      in: query
+      name: cluster
+      required: true
+      schema:
+        example: europe
+        type: string
+      style: form
   schemas:
     version:
       allOf:
@@ -919,7 +975,7 @@ components:
           default: No Content
           type: string
         details:
-          type: string
+          type: object
       title: status_200_ok_no_content_data
       type: object
     status_400_bad_request_errors:
@@ -1453,32 +1509,6 @@ components:
       required:
       - subvol_name
       title: SubvolumeCreateOrResizeRequest
-      type: object
-    SubvolumeInfo:
-      additionalProperties: true
-      example:
-        bytes_quota: 0
-        mode: "0777"
-        path: path
-        created_at: 2000-01-23T04:56:07.000+00:00
-        state: complete
-      properties:
-        path:
-          description: Absolute CephFS path to the subvolume (use for mounting)
-          type: string
-        bytes_quota:
-          format: int64
-          type: integer
-        mode:
-          example: "0777"
-          type: string
-        state:
-          example: complete
-          type: string
-        created_at:
-          format: date-time
-          type: string
-      title: SubvolumeInfo
       type: object
     SubvolumeExists:
       example:

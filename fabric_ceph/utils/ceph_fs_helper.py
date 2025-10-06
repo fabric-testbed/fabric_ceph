@@ -82,111 +82,81 @@ class SubvolDeleteResult:
             "errors": self.errors,
         }
 
-# ---------- provisioning ----------
+# ---------- single-cluster operations ----------
 
-def ensure_subvolume_across_clusters(
+def ensure_subvolume_on_cluster(
     cfg: Config,
+    cluster: str,
     fs_name: str,
     subvol_name: str,
     group_name: Optional[str] = None,
     size_bytes: Optional[int] = None,
     mode: Optional[str] = None,
-    preferred_source: Optional[str] = None,
 ) -> Dict[str, object]:
     """
-    Ensure a CephFS subvolume (and its group) exists across all clusters with the same name,
-    and apply 'size_bytes' (quota) consistently.
+    Ensure a CephFS subvolume (and optional group) exists on ONE cluster and apply 'size_bytes' (quota) if provided.
 
-    Algo:
-      - Build clients for all clusters.
-      - Choose SOURCE: first cluster where subvolume already exists; else preferred/first.
-      - On SOURCE: ensure group; create (with mode) if missing, else resize if size specified.
-      - On all other clusters: ensure group; create/resize with same parameters (idempotent).
-      - Gather 'path' for each cluster via info() and return a consolidated result.
+    Returns SubvolSyncResult (maps contain a single key = the target cluster).
     """
     logger = logging.getLogger(cfg.logging.logger)
-    clients: Dict[str, DashClient] = {name: DashClient.for_cluster(name, entry)
-                                      for name, entry in cfg.cluster.items()}
 
-    # 1) find source cluster with existing subvol
-    source_name: Optional[str] = None
-    for name, dc in clients.items():
-        try:
-            if dc.subvolume_exists(fs_name, subvol_name, group_name):
-                source_name = name
-                break
-        except Exception:
-            logger.warning("Subvolume %s with group %s does not exist on %s",
-                           subvol_name, group_name, fs_name)
-            continue
+    if cluster not in cfg.cluster:
+        raise ValueError(f"Unknown cluster '{cluster}'")
 
-    existed_on_source = source_name is not None
-    created_on_source = False
-
-    if source_name is None:
-        if preferred_source and preferred_source in clients:
-            source_name = preferred_source
-        else:
-            source_name = next(iter(clients.keys()))
+    entry = cfg.cluster[cluster]
+    dc = DashClient.for_cluster(cluster, entry)
 
     applied: Dict[str, str] = {}
     paths: Dict[str, str] = {}
     errors: Dict[str, str] = {}
 
-    # Helper to apply on one cluster
-    def _apply(dc: DashClient, name: str, is_source: bool) -> None:
-        nonlocal created_on_source
-        try:
-            # group
-            if group_name:
-                dc.ensure_subvol_group(fs_name, group_name)
+    existed_on_source = False
+    created_on_source = False
 
-            exists = dc.subvolume_exists(fs_name, subvol_name, group_name)
-            if exists:
-                # resize if quota specified; otherwise no-op "ok"
-                if size_bytes is not None and int(size_bytes) >= 0:
-                    dc.resize_subvolume(fs_name, subvol_name, group_name, size_bytes=size_bytes)
-                    applied[name] = "resized"
-                else:
-                    applied[name] = "ok"
+    try:
+        # Ensure group if requested
+        if group_name:
+            dc.ensure_subvol_group(fs_name, group_name)
+
+        # Existence check
+        exists = dc.subvolume_exists(fs_name, subvol_name, group_name)
+        existed_on_source = bool(exists)
+
+        if exists:
+            # Resize if a quota was specified; otherwise it's a no-op
+            if size_bytes is not None and int(size_bytes) >= 0:
+                dc.resize_subvolume(fs_name, subvol_name, group_name, size_bytes=size_bytes)
+                applied[cluster] = "resized"
             else:
-                # create; pass mode if provided; omit size to create unlimited
-                dc.create_subvolume(
-                    fs_name, subvol_name, group_name, size_bytes=size_bytes, mode=mode
-                )
-                applied[name] = "created"
-                if is_source:
-                    created_on_source = True
+                applied[cluster] = "ok"
+        else:
+            # Create; pass mode if provided; omit size for unlimited
+            dc.create_subvolume(
+                fs_name, subvol_name, group_name, size_bytes=size_bytes, mode=mode
+            )
+            applied[cluster] = "created"
+            created_on_source = True
 
-            # fetch info to capture path
-            info = dc.get_subvolume_info(fs_name, subvol_name, group_name)
-            spath = None
-            for k in ("path", "full_path", "mount_path", "mountpoint"):
-                if isinstance(info, dict) and isinstance(info.get(k), str) and info[k].startswith("/"):
-                    spath = info[k]
-                    break
-            if not spath:
-                # last resort: accept any absolute path-looking string
-                spath = next((v for v in info.values() if isinstance(v, str) and v.startswith("/")), "")
-            if spath:
-                paths[name] = spath
+        # Fetch info to capture path
+        info = dc.get_subvolume_info(fs_name, subvol_name, group_name)
+        spath = None
+        for k in ("path", "full_path", "mount_path", "mountpoint"):
+            v = info.get(k) if isinstance(info, dict) else None
+            if isinstance(v, str) and v.startswith("/"):
+                spath = v
+                break
+        if not spath and isinstance(info, dict):
+            spath = next((v for v in info.values() if isinstance(v, str) and v.startswith("/")), "")
+        if spath:
+            paths[cluster] = spath
 
-        except Exception as e:
-            logger.error("Subvolume %s with group %s could not be created on %s at cluster %s",
-                        subvol_name, group_name, fs_name, name)
-            logger.exception(e)
-
-            errors[name] = str(e)
-
-    # 2) source first
-    dc_source = clients[source_name]
-    _apply(dc_source, source_name, is_source=True)
-
-    # 3) the rest
-    for name, dc in clients.items():
-        if name == source_name:
-            continue
-        _apply(dc, name, is_source=False)
+    except Exception as e:
+        logger.error(
+            "Subvolume %s (group=%s) could not be ensured on cluster %s (fs=%s)",
+            subvol_name, group_name, cluster, fs_name
+        )
+        logger.exception(e)
+        errors[cluster] = str(e)
 
     return SubvolSyncResult(
         fs_name=fs_name,
@@ -194,7 +164,7 @@ def ensure_subvolume_across_clusters(
         subvol_name=subvol_name,
         requested_size=(int(size_bytes) if size_bytes is not None else None),
         requested_mode=(str(mode) if mode else None),
-        source_cluster=source_name,
+        source_cluster=cluster,
         existed_on_source=existed_on_source,
         created_on_source=created_on_source,
         applied=applied,
@@ -203,36 +173,44 @@ def ensure_subvolume_across_clusters(
     ).to_dict()
 
 
-def delete_subvolume_across_clusters(
+def delete_subvolume_on_cluster(
     cfg: Config,
+    cluster: str,
     fs_name: str,
     subvol_name: str,
     group_name: Optional[str] = None,
     force: bool = False,
 ) -> Dict[str, object]:
     """
-    Delete a subvolume from every cluster (best effort).
-    Returns which clusters deleted it, which didn't have it, and any errors.
+    Delete a subvolume from ONE cluster (best effort).
+
+    Returns SubvolDeleteResult with single-element lists.
     """
     logger = logging.getLogger(cfg.logging.logger)
-    clients: Dict[str, DashClient] = {name: DashClient.for_cluster(name, entry)
-                                      for name, entry in cfg.cluster.items()}
+
+    if cluster not in cfg.cluster:
+        raise ValueError(f"Unknown cluster '{cluster}'")
+
+    entry = cfg.cluster[cluster]
+    dc = DashClient.for_cluster(cluster, entry)
 
     deleted_from: List[str] = []
     not_found: List[str] = []
     errors: Dict[str, str] = {}
 
-    for name, dc in clients.items():
-        try:
-            if dc.subvolume_exists(fs_name, subvol_name, group_name):
-                dc.delete_subvolume(fs_name, subvol_name, group_name, force=force)
-                deleted_from.append(name)
-            else:
-                not_found.append(name)
-        except Exception as e:
-            logger.error("Subvolume %s with group %s could not be deleted on %s at cluster %s",
-                         subvol_name, group_name, fs_name, name)
-            errors[name] = str(e)
+    try:
+        if dc.subvolume_exists(fs_name, subvol_name, group_name):
+            dc.delete_subvolume(fs_name, subvol_name, group_name, force=force)
+            deleted_from.append(cluster)
+        else:
+            not_found.append(cluster)
+    except Exception as e:
+        logger.error(
+            "Subvolume %s (group=%s) could not be deleted on cluster %s (fs=%s)",
+            subvol_name, group_name, cluster, fs_name
+        )
+        logger.exception(e)
+        errors[cluster] = str(e)
 
     return SubvolDeleteResult(
         fs_name=fs_name,

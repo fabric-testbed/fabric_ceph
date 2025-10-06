@@ -2,9 +2,9 @@ import unittest
 
 from flask import json
 
-from fabric_ceph.openapi_server.models.status500_internal_server_error import Status500InternalServerError  # noqa: E501
-from fabric_ceph.openapi_server.models.version import Version  # noqa: E501
-from fabric_ceph.openapi_server.test import BaseTestCase
+from fabric_ceph.fabric_ceph.openapi_server.models.status500_internal_server_error import Status500InternalServerError  # noqa: E501
+from fabric_ceph.fabric_ceph.openapi_server.models.version import Version  # noqa: E501
+from fabric_ceph.fabric_ceph.openapi_server.test import BaseTestCase
 
 
 class TestVersionController(BaseTestCase):

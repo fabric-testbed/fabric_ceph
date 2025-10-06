@@ -5,10 +5,10 @@ Ceph Manager Client (Python)
 
 Minimal, friendly wrapper for the FABRIC Ceph Manager service.
 
-Changes (per-cluster API):
-- All CephFS and Cluster User calls now require a `cluster` argument and hit
-  paths like `/{cluster}/cephfs/...` and `/{cluster}/cluster/user...`.
-- The legacy X-Cluster header is no longer used.
+Per-cluster API change:
+- All CephFS and Cluster User calls now take `cluster: str` and send it as a
+  query parameter (?cluster=<name>) to routes like `/cluster/user`,
+  `/cephfs/subvolume/{vol_name}`, etc. No X-Cluster header, no /{cluster}/ prefix.
 
 Auth:
 - Token via `token` or `token_file` (JSON: reads `id_token` by default).
@@ -54,7 +54,7 @@ class CephManagerClient:
     accept: str = "application/json, text/plain"
 
     # Deprecated (kept only to avoid breaking ctor signatures)
-    default_x_cluster: Optional[str] = None  # DEPRECATED: path now carries cluster
+    default_x_cluster: Optional[str] = None  # DEPRECATED
 
     # internal
     _session: requests.Session = field(init=False, repr=False, compare=False)
@@ -185,16 +185,21 @@ class CephManagerClient:
         return resp.json() if self._is_json(resp) else resp.text
 
     @staticmethod
-    def _cluster_path(cluster: str, tail: str) -> str:
+    def _params_with_cluster(cluster: str, extra: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         if not cluster or not cluster.strip():
             raise ValueError("cluster must be a non-empty string")
-        tail = tail if tail.startswith("/") else "/" + tail
-        return f"/{cluster}{tail}"
+        out = {"cluster": cluster}
+        if extra:
+            # don't allow extra to overwrite 'cluster'
+            for k, v in extra.items():
+                if k != "cluster":
+                    out[k] = v
+        return out
 
     # --------------------- Cluster info (global) ---------------------
 
     def list_cluster_info(self) -> Dict[str, Any]:
-        """GET /cluster/info (no per-cluster parameter needed)."""
+        """GET /cluster/info (no per-cluster parameter)."""
         return self._request("GET", "/cluster/info")
 
     def cluster_minimal_confs(self) -> Dict[str, str]:
@@ -209,7 +214,7 @@ class CephManagerClient:
                     out[cluster] = conf
         return out
 
-    # --------------------- Cluster User (per cluster) ---------------------
+    # --------------------- Cluster User (per cluster via query param) ---------------------
 
     def apply_user_templated(
         self,
@@ -222,16 +227,16 @@ class CephManagerClient:
         subvol_name: Optional[str] = None,
         group_name: Optional[str] = None,
         extra_subs: Optional[Dict[str, str]] = None,
-        merge_strategy: Optional[str] = None,  # "comma" | "multi" | "auto" (server-defined)
+        merge_strategy: Optional[str] = None,  # "comma" | "multi" | "auto"
         dry_run: bool = False,
         sync_across_clusters: bool = True,
         preferred_source: Optional[str] = None,
     ) -> Dict[str, Any]:
         """
-        POST /{cluster}/cluster/user
+        POST /cluster/user?cluster=<name>
 
-        Always sends `renders` (array). If only a single context is provided
-        via (fs_name, subvol_name, group_name), it is normalized to a one-item list.
+        Always sends `renders` (array). If only a single context is provided,
+        normalize it to one item.
         """
         # Normalize contexts -> renders[]
         if renders and len(renders) > 0:
@@ -263,7 +268,12 @@ class CephManagerClient:
         if merge_strategy:
             payload["merge_strategy"] = merge_strategy
 
-        return self._request("POST", self._cluster_path(cluster, "/cluster/user"), json=payload)
+        return self._request(
+            "POST",
+            "/cluster/user",
+            params=self._params_with_cluster(cluster),
+            json=payload,
+        )
 
     def apply_user_for_multiple_subvols(
         self,
@@ -298,24 +308,28 @@ class CephManagerClient:
         )
 
     def list_users(self, cluster: str) -> Dict[str, Any]:
-        """GET /{cluster}/cluster/user"""
-        return self._request("GET", self._cluster_path(cluster, "/cluster/user"))
+        """GET /cluster/user?cluster=<name>"""
+        return self._request("GET", "/cluster/user", params=self._params_with_cluster(cluster))
 
     def delete_user(self, cluster: str, entity: str) -> Dict[str, Any]:
-        """DELETE /{cluster}/cluster/user/{entity}"""
-        return self._request("DELETE", self._cluster_path(cluster, f"/cluster/user/{entity}"))
+        """DELETE /cluster/user/{entity}?cluster=<name>"""
+        return self._request("DELETE", f"/cluster/user/{entity}", params=self._params_with_cluster(cluster))
 
     def export_users(self, cluster: str, entities: List[str]) -> Dict[str, Any]:
         """
-        POST /{cluster}/cluster/user/export
-        Returns the full ExportUsersResponse (e.g., {"clusters": {...}, "type": "keyrings", ...}).
+        POST /cluster/user/export?cluster=<name>
+        Returns ExportUsersResponse (e.g., {"clusters": {...}, "type": "keyrings", ...}).
         """
         if not entities:
             raise ValueError("entities must be a non-empty list")
-        return self._request("POST", self._cluster_path(cluster, "/cluster/user/export"),
-                             json={"entities": entities})
+        return self._request(
+            "POST",
+            "/cluster/user/export",
+            params=self._params_with_cluster(cluster),
+            json={"entities": entities},
+        )
 
-    # --------------------- CephFS (per cluster) ---------------------
+    # --------------------- CephFS (per cluster via query param) ---------------------
 
     def create_or_resize_subvolume(
         self,
@@ -327,7 +341,7 @@ class CephManagerClient:
         size: Optional[int] = None,
         mode: Optional[str] = None,
     ) -> Dict[str, Any]:
-        """PUT /{cluster}/cephfs/subvolume/{vol_name}"""
+        """PUT /cephfs/subvolume/{vol_name}?cluster=<name>"""
         payload: Dict[str, Any] = {"subvol_name": subvol_name}
         if group_name:
             payload["group_name"] = group_name
@@ -335,7 +349,12 @@ class CephManagerClient:
             payload["size"] = int(size)
         if mode:
             payload["mode"] = str(mode)
-        return self._request("PUT", self._cluster_path(cluster, f"/cephfs/subvolume/{vol_name}"), json=payload)
+        return self._request(
+            "PUT",
+            f"/cephfs/subvolume/{vol_name}",
+            params=self._params_with_cluster(cluster),
+            json=payload,
+        )
 
     def get_subvolume_info(
         self,
@@ -345,11 +364,15 @@ class CephManagerClient:
         *,
         group_name: Optional[str] = None,
     ) -> Dict[str, Any]:
-        """GET /{cluster}/cephfs/subvolume/{vol_name}/info"""
-        params = {"subvol_name": subvol_name}
+        """GET /cephfs/subvolume/{vol_name}/info?cluster=<name>&subvol_name=..."""
+        q = {"subvol_name": subvol_name}
         if group_name:
-            params["group_name"] = group_name
-        return self._request("GET", self._cluster_path(cluster, f"/cephfs/subvolume/{vol_name}/info"), params=params)
+            q["group_name"] = group_name
+        return self._request(
+            "GET",
+            f"/cephfs/subvolume/{vol_name}/info",
+            params=self._params_with_cluster(cluster, q),
+        )
 
     def subvolume_exists(
         self,
@@ -359,11 +382,15 @@ class CephManagerClient:
         *,
         group_name: Optional[str] = None,
     ) -> bool:
-        """GET /{cluster}/cephfs/subvolume/{vol_name}/exists -> {'exists': bool}"""
-        params = {"subvol_name": subvol_name}
+        """GET /cephfs/subvolume/{vol_name}/exists?cluster=<name>&subvol_name=... -> {'exists': bool}"""
+        q = {"subvol_name": subvol_name}
         if group_name:
-            params["group_name"] = group_name
-        res = self._request("GET", self._cluster_path(cluster, f"/cephfs/subvolume/{vol_name}/exists"), params=params)
+            q["group_name"] = group_name
+        res = self._request(
+            "GET",
+            f"/cephfs/subvolume/{vol_name}/exists",
+            params=self._params_with_cluster(cluster, q),
+        )
         return bool(res.get("exists")) if isinstance(res, dict) else bool(res)
 
     def delete_subvolume(
@@ -375,8 +402,12 @@ class CephManagerClient:
         group_name: Optional[str] = None,
         force: bool = False,
     ) -> Dict[str, Any]:
-        """DELETE /{cluster}/cephfs/subvolume/{vol_name}"""
-        params: Dict[str, Any] = {"subvol_name": subvol_name, "force": str(bool(force)).lower()}
+        """DELETE /cephfs/subvolume/{vol_name}?cluster=<name>&subvol_name=..."""
+        q: Dict[str, Any] = {"subvol_name": subvol_name, "force": str(bool(force)).lower()}
         if group_name:
-            params["group_name"] = group_name
-        return self._request("DELETE", self._cluster_path(cluster, f"/cephfs/subvolume/{vol_name}"), params=params)
+            q["group_name"] = group_name
+        return self._request(
+            "DELETE",
+            f"/cephfs/subvolume/{vol_name}",
+            params=self._params_with_cluster(cluster, q),
+        )

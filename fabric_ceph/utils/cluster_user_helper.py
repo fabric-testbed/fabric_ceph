@@ -262,8 +262,6 @@ def export_users_on_cluster(
                 raise RuntimeError("key not found in exported keyring")
         except Exception as e:
             logger.exception("Encountered exception while exporting %s on %s", ent, cluster)
-            # record an empty value to signal failure for this entity
-            exported[ent] = ""
 
     # Optionally, you could filter out failures:
     # exported = {k: v for k, v in exported.items() if v}

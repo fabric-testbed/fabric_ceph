@@ -375,7 +375,8 @@ def export_users_on_cluster(
     for ent in entities:
         try:
             keyring = dc.export_keyring(ent)
-            exported[ent] = keyring if not keyring_only else (keyring_minimal(keyring) or "")
+            exported[ent] = _unescape_keyring_blob(keyring)
+            #exported[ent] = keyring if not keyring_only else (keyring_minimal(keyring) or "")
             if keyring_only and not exported[ent]:
                 raise RuntimeError("key not found in exported keyring")
         except Exception as e:

@@ -214,6 +214,18 @@ class CephManagerClient:
                     out[cluster] = conf
         return out
 
+    @staticmethod
+    def _norm_cap_item(it: Dict[str, str]) -> Dict[str, str]:
+        t = it.get("entity") or it.get("type")
+        c = it.get("cap") or it.get("caps")
+        if not t or not c:
+            raise ValueError("Each template_capability must include entity/type and cap/caps")
+        return {"entity": t, "cap": c}
+
+    @staticmethod
+    def _normalize_caps(items: List[Dict[str, str]]) -> List[Dict[str, str]]:
+        return [CephManagerClient._norm_cap_item(i) for i in items]
+
     # --------------------- Cluster User (per cluster via query param) ---------------------
 
     def apply_user_templated(
@@ -284,7 +296,7 @@ class CephManagerClient:
         contexts: List[Tuple[str, str, Optional[str]]],  # (fs_name, subvol_name, group_name)
         sync_across_clusters: bool = True,
         preferred_source: Optional[str] = None,
-        merge_strategy: Optional[str] = "comma",
+        merge_strategy: Optional[str] = "multi",
         dry_run: bool = False,
         extra_subs: Optional[Dict[str, str]] = None,
     ) -> Dict[str, Any]:
@@ -305,6 +317,41 @@ class CephManagerClient:
             dry_run=dry_run,
             sync_across_clusters=sync_across_clusters,
             preferred_source=preferred_source,
+        )
+
+    @staticmethod
+    def _dedup_contexts(contexts: List[Tuple[str, str, Optional[str]]]) -> List[Tuple[str, str, Optional[str]]]:
+        seen, out = set(), []
+        for fsn, svn, grp in contexts:
+            key = (fsn, svn, grp or None)
+            if key not in seen:
+                seen.add(key);
+                out.append((fsn, svn, grp))
+        return out
+
+    def apply_user_multi(
+            self,
+            cluster: str,
+            *,
+            user_entity: str,
+            template_capabilities: List[Dict[str, str]],
+            contexts: List[Tuple[str, str, Optional[str]]],
+            dry_run: bool = False,
+            preferred_source: Optional[str] = None,
+            sync_across_clusters: bool = True,
+            extra_subs: Optional[Dict[str, str]] = None,
+    ) -> Dict[str, Any]:
+        contexts = self._dedup_contexts(contexts)
+        return self.apply_user_for_multiple_subvols(
+            cluster=cluster,
+            user_entity=user_entity,
+            template_capabilities=self._normalize_caps(template_capabilities),
+            contexts=contexts,
+            merge_strategy="multi",
+            dry_run=dry_run,
+            preferred_source=preferred_source,
+            sync_across_clusters=sync_across_clusters,
+            extra_subs=extra_subs,
         )
 
     def list_users(self, cluster: str) -> Dict[str, Any]:

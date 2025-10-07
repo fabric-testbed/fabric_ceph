@@ -1,17 +1,3 @@
-import connexion
-from typing import Dict
-from typing import Tuple
-from typing import Union
-
-from fabric_ceph.openapi_server.models.status200_ok_no_content import Status200OkNoContent  # noqa: E501
-from fabric_ceph.openapi_server.models.status400_bad_request import Status400BadRequest  # noqa: E501
-from fabric_ceph.openapi_server.models.status401_unauthorized import Status401Unauthorized  # noqa: E501
-from fabric_ceph.openapi_server.models.status403_forbidden import Status403Forbidden  # noqa: E501
-from fabric_ceph.openapi_server.models.status404_not_found import Status404NotFound  # noqa: E501
-from fabric_ceph.openapi_server.models.status500_internal_server_error import Status500InternalServerError  # noqa: E501
-from fabric_ceph.openapi_server.models.subvolume_create_or_resize_request import SubvolumeCreateOrResizeRequest  # noqa: E501
-from fabric_ceph.openapi_server.models.subvolume_exists import SubvolumeExists  # noqa: E501
-from fabric_ceph.openapi_server import util
 from fabric_ceph.response import ceph_fs_controller as rc
 
 def create_or_resize_subvolume(cluster, vol_name, body):  # noqa: E501

@@ -8,9 +8,70 @@ from typing import Any, Dict, List, Optional
 from fabric_ceph.common.config import Config
 from fabric_ceph.utils.dash_client import DashClient
 from fabric_ceph.utils.keyring_parser import keyring_minimal
-
+import re
+from typing import Tuple
 
 # ---------- helpers (unchanged) ----------
+
+# Stronger > weaker
+_PERM_ORDER = {"r": 0, "rw": 1, "rwps": 2}
+
+def _extract_caps_by_entity_from_keyring(keyring_text: str) -> Dict[str, str]:
+    """Pull raw mon/mds/osd cap strings from a keyring blob."""
+    out: Dict[str, str] = {}
+    if not isinstance(keyring_text, str):
+        try:
+            keyring_text = keyring_text.decode("utf-8", "ignore")
+        except Exception:
+            keyring_text = str(keyring_text)
+    for ent in ("mon", "mds", "osd"):
+        m = re.search(rf'caps\s+{ent}\s*=\s*"([^"]+)"', keyring_text)
+        if m:
+            out[ent] = m.group(1)
+    return out
+
+def _parse_mds_caps(mds: str) -> List[Tuple[str, str, str]]:
+    """Return list of (fsname, path, perm)."""
+    res: List[Tuple[str, str, str]] = []
+    if not mds:
+        return res
+    for clause in (c.strip() for c in mds.split(",") if c.strip()):
+        pm = re.search(r'allow\s+([a-z*]+)', clause)
+        fm = re.search(r'fsname=([A-Za-z0-9_.:-]+)', clause)
+        pa = re.search(r'path=([^,\s]+)', clause)
+        if pm and fm and pa:
+            res.append((fm.group(1), pa.group(1), pm.group(1)))
+    return res
+
+def _format_mds_caps(clauses: List[Tuple[str, str, str]]) -> str:
+    """Choose strongest perm per (fs,path) and produce one MDS caps string."""
+    best: Dict[Tuple[str, str], str] = {}
+    for fs, path, perm in clauses:
+        cur = best.get((fs, path))
+        if cur is None or _PERM_ORDER.get(perm, 0) > _PERM_ORDER.get(cur, 0):
+            best[(fs, path)] = perm
+    ordered = sorted(best.items(), key=lambda kv: (kv[0][0], kv[0][1]))
+    return ", ".join(f"allow {perm} fsname={fs} path={path}" for (fs, path), perm in ordered)
+
+def _merge_mon(existing: str, new: str) -> str:
+    fs_re = re.compile(r'fsname=([A-Za-z0-9_.:-]+)')
+    have = set(fs_re.findall(existing or ""))
+    add  = set(fs_re.findall(new or ""))
+    allfs = have | add
+    if not allfs:
+        return existing or new
+    return ", ".join(sorted({f"allow r fsname={fs}" for fs in allfs}))
+
+def _merge_osd(existing: str, new: str) -> str:
+    d_re = re.compile(r'data=([A-Za-z0-9_.:-]+)')
+    m_re = re.compile(r'metadata=([A-Za-z0-9_.:-]+)')
+    have_d, have_m = set(d_re.findall(existing or "")), set(m_re.findall(existing or ""))
+    add_d,  add_m  = set(d_re.findall(new or "")),     set(m_re.findall(new or ""))
+    all_d,  all_m  = have_d | add_d,                   have_m | add_m
+    parts = {f"allow rw tag cephfs data={fs}" for fs in all_d}
+    parts |= {f"allow rw tag cephfs metadata={fs}" for fs in all_m}
+    return ", ".join(sorted(parts))
+
 
 def _resolve_subvol_path(dc: DashClient, fs_name: str, subvol_name: str, group_name: Optional[str]) -> str:
     info = dc.get_subvolume_info(fs_name, subvol_name, group_name)
@@ -121,16 +182,58 @@ def ensure_user_on_cluster_with_cluster_paths_multi(
         errors[cluster] = err
 
     try:
-        # Render and apply caps (update -> create fallback)
+        # Render request -> per-entity strings (already merged across renders)
         caps_here = _render_caps_for_contexts(base_capabilities, contexts)
-        status = dc.update_user_caps(user_entity, caps_here)
+        new_map = {c["entity"]: c["cap"] for c in caps_here}
+
+        # Read existing caps from keyring (if user exists)
+        try:
+            existing_keyring = dc.export_keyring(user_entity)
+            existing_map = _extract_caps_by_entity_from_keyring(existing_keyring) if existing_keyring else {}
+        except Exception:
+            existing_map = {}
+
+        # Merge (no downgrade): mds union by (fs,path) with stronger permission; mon/osd union by fs
+        merged_mds = _format_mds_caps(
+            _parse_mds_caps(existing_map.get("mds", "")) +
+            _parse_mds_caps(new_map.get("mds", ""))
+        ) if ("mds" in new_map or "mds" in existing_map) else ""
+
+        merged_mon = _merge_mon(existing_map.get("mon", ""), new_map.get("mon", "")) \
+            if ("mon" in new_map or "mon" in existing_map) else ""
+
+        merged_osd = _merge_osd(existing_map.get("osd", ""), new_map.get("osd", "")) \
+            if ("osd" in new_map or "osd" in existing_map) else ""
+
+        # Anything else → simple comma-union (rare)
+        merged_other: Dict[str, str] = {}
+        for ent, cap in new_map.items():
+            if ent in ("mds", "mon", "osd"):
+                continue
+            prev = existing_map.get(ent, "")
+            merged_other[ent] = ", ".join(dict.fromkeys(
+                [s.strip() for s in (prev.split(",") if prev else [])] +
+                [s.strip() for s in (cap.split(",") if cap else [])]
+            ))
+
+        final_caps: List[Dict[str, str]] = []
+        if merged_mon: final_caps.append({"entity": "mon", "cap": merged_mon})
+        if merged_mds: final_caps.append({"entity": "mds", "cap": merged_mds})
+        if merged_osd: final_caps.append({"entity": "osd", "cap": merged_osd})
+        for ent, cap in merged_other.items():
+            if cap:
+                final_caps.append({"entity": ent, "cap": cap})
+
+        # Apply (update → create fallback)
+        status = dc.update_user_caps(user_entity, final_caps)
         if status in (200, 201, 202):
             updated_on_source = True
         else:
-            dc.create_user(user_entity, caps_here)
+            dc.create_user(user_entity, final_caps)
             created_on_source = True
             updated_on_source = True
-        caps_applied[cluster] = caps_here
+
+        caps_applied[cluster] = final_caps
     except Exception as e:
         err = f"apply failed: {e}"
         log.exception(err)

@@ -190,6 +190,7 @@ def ensure_user_on_cluster_with_cluster_paths_multi(
         try:
             existing_keyring = dc.export_keyring(user_entity)
             existing_map = _extract_caps_by_entity_from_keyring(existing_keyring) if existing_keyring else {}
+            log.debug(f"existing keyring: {existing_keyring}")
         except Exception:
             existing_map = {}
 
@@ -204,6 +205,11 @@ def ensure_user_on_cluster_with_cluster_paths_multi(
 
         merged_osd = _merge_osd(existing_map.get("osd", ""), new_map.get("osd", "")) \
             if ("osd" in new_map or "osd" in existing_map) else ""
+
+        log.debug(f"new mds: {new_map}")
+        log.debug(f"merged mon: {merged_mon}")
+        log.debug(f"merged mds: {merged_mds}")
+        log.debug(f"merged osd: {merged_osd}")
 
         # Anything else → simple comma-union (rare)
         merged_other: Dict[str, str] = {}

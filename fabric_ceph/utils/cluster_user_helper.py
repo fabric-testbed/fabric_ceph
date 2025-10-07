@@ -123,10 +123,10 @@ def ensure_user_on_cluster_with_cluster_paths_multi(
     try:
         # Render and apply caps (update -> create fallback)
         caps_here = _render_caps_for_contexts(base_capabilities, contexts)
-        try:
-            dc.update_user_caps(user_entity, caps_here)
+        status = dc.update_user_caps(user_entity, caps_here)
+        if status in (200, 201, 202):
             updated_on_source = True
-        except Exception:
+        else:
             dc.create_user(user_entity, caps_here)
             created_on_source = True
             updated_on_source = True

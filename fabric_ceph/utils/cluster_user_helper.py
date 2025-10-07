@@ -3,9 +3,11 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
+from http.client import BAD_REQUEST
 from typing import Any, Dict, List, Optional
 
 from fabric_ceph.common.config import Config
+from fabric_ceph.response.ceph_exception import CephException
 from fabric_ceph.utils.dash_client import DashClient
 from fabric_ceph.utils.keyring_parser import keyring_minimal
 import re
@@ -143,16 +145,7 @@ def ensure_user_on_cluster_with_cluster_paths_multi(
     log = logging.getLogger(cfg.logging.logger)
 
     if cluster not in cfg.cluster:
-        return {
-            "user_entity": user_entity,
-            "source_cluster": cluster,
-            "created_on_source": False,
-            "updated_on_source": False,
-            "imported_to": [],
-            "caps_applied": {},
-            "paths": {},
-            "errors": {cluster: f"unknown cluster '{cluster}'"},
-        }
+        raise CephException("Unknown cluster '%s'" % cluster, http_error_code=BAD_REQUEST)
 
     dc = DashClient.for_cluster(cluster, cfg.cluster[cluster])
     errors: Dict[str, str] = {}
@@ -195,9 +188,12 @@ def ensure_user_on_cluster_with_cluster_paths_multi(
             existing_map = {}
 
         # Merge (no downgrade): mds union by (fs,path) with stronger permission; mon/osd union by fs
+        ex = _parse_mds_caps(existing_map.get("mds", ""))
+        log.debug(f"existing mds parsed: {ex}")
+        nw = _parse_mds_caps(new_map.get("mds", ""))
+        log.debug(f"new mds parsed: {nw}")
         merged_mds = _format_mds_caps(
-            _parse_mds_caps(existing_map.get("mds", "")) +
-            _parse_mds_caps(new_map.get("mds", ""))
+            ex + nw
         ) if ("mds" in new_map or "mds" in existing_map) else ""
 
         merged_mon = _merge_mon(existing_map.get("mon", ""), new_map.get("mon", "")) \
@@ -230,6 +226,7 @@ def ensure_user_on_cluster_with_cluster_paths_multi(
             if cap:
                 final_caps.append({"entity": ent, "cap": cap})
 
+        log.debug(f"final caps: {final_caps}")
         # Apply (update → create fallback)
         status = dc.update_user_caps(user_entity, final_caps)
         if status in (200, 201, 202):
@@ -376,3 +373,13 @@ def export_users_on_cluster(
     # exported = {k: v for k, v in exported.items() if v}
 
     return {"cluster": cluster, "entities": exported}
+
+
+if __name__ == "__main__":
+    existing = "[client.kthare10_0011904101]\n\tkey = AQDJN+VoeZugGBAABb4p6+y42l5o7vFDUS0FIg==\n\tcaps mds = \"allow rw fsname=CEPH-FS-01 path=/volumes/_nogroup/kthare10_0011904101/8a648e13-6e39-47b3-8245-d05a702aeb00\"\n\tcaps mon = \"allow r fsname=CEPH-FS-01\"\n\tcaps osd = \"allow rw tag cephfs data=CEPH-FS-01, allow rw tag cephfs metadata=CEPH-FS-01\"\n\n"
+    existing_map = _extract_caps_by_entity_from_keyring(existing)
+    new_mds = 'allow rw fsname=CEPH-FS-01 path=/volumes/04b14c17-e66a-4405-98fc-d737717e2160/fabric-staff-no-permissions/c1431649-2b31-4a4b-8e62-2b71279433a3'
+    merge = _format_mds_caps(_parse_mds_caps(existing_map.get("mds", "")) +
+            _parse_mds_caps(new_mds))
+    print(merge)
+    print(type(merge))

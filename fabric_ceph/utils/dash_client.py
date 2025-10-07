@@ -24,7 +24,7 @@
 #
 # Author: Komal Thareja (kthare10@renci.org)
 from dataclasses import dataclass
-from typing import Dict, List, Tuple, Optional
+from typing import Dict, List, Tuple, Optional, Any
 from urllib.parse import urlparse
 
 import requests
@@ -275,3 +275,117 @@ class DashClient:
                          headers=self._hdrs(), timeout=60, verify=self.verify_tls)
         r.raise_for_status()
         return r.json()
+
+    # ---------- CephX auth helpers ----------
+
+    @staticmethod
+    def _parse_caps_string(s: str) -> Dict[str, str]:
+        """
+        Parse a capabilities string like:
+          "mon 'allow r', osd 'allow rwx pool=data', mds 'allow rw fsname=FS path=/vol/...'"
+        into {"mon": "allow r", "osd": "...", "mds": "..."}.
+        """
+        caps: Dict[str, str] = {}
+        parts = [p.strip() for p in (s or "").split(",") if p.strip()]
+        for p in parts:
+            # Expect "<comp> '<value>'"
+            if " " not in p:
+                continue
+            comp, rest = p.split(" ", 1)
+            val = rest.strip()
+            if val.startswith("'") and val.endswith("'"):
+                val = val[1:-1]
+            caps[comp.strip()] = val
+        return caps
+
+    def auth_list(self) -> List[Dict[str, Any]]:
+        """
+        Return a normalized list of users:
+          [{"entity": "client.foo", "caps": {"mon": "...", "osd": "...", "mds": "...", "mgr": "..."}, "raw": <orig>}, ...]
+        Works across dashboard variants that return caps as list/dict/string.
+        """
+        users = self.list_users()
+        out: List[Dict[str, Any]] = []
+
+        for u in users:
+            entity = (
+                u.get("entity")
+                or u.get("user_entity")
+                or u.get("user_id")
+                or u.get("id")
+                or u.get("name")
+                or ""
+            )
+            caps_raw = u.get("caps") or u.get("capabilities") or {}
+            caps: Dict[str, str] = {}
+
+            if isinstance(caps_raw, list):
+                # e.g. [{"type": "mds", "value": "allow ..."}, ...]
+                for c in caps_raw:
+                    if isinstance(c, dict):
+                        t = c.get("type") or c.get("component")
+                        v = c.get("value") or c.get("cap") or ""
+                        if t:
+                            caps[str(t)] = str(v)
+            elif isinstance(caps_raw, dict):
+                # already a mapping
+                for k, v in caps_raw.items():
+                    if isinstance(v, dict) and "value" in v:
+                        caps[str(k)] = str(v["value"])
+                    else:
+                        caps[str(k)] = str(v)
+            elif isinstance(caps_raw, str):
+                # single string: "mon 'allow r', osd 'allow *', ..."
+                caps = self._parse_caps_string(caps_raw)
+
+            out.append({"entity": str(entity), "caps": caps, "raw": u})
+
+        return out
+
+    def auth_caps_set(
+        self,
+        user_entity: str,
+        *,
+        mds: Optional[str] = None,
+        mon: Optional[str] = None,
+        osd: Optional[str] = None,
+        mgr: Optional[str] = None,
+        replace: bool = False,
+    ) -> int:
+        """
+        Overwrite a user's caps on the Dashboard API. By default, merges with existing caps so
+        you can change just one component (e.g., mds) safely.
+
+        Args:
+          user_entity: "client.username" (exact CephX entity)
+          mds/mon/osd/mgr: new values (e.g., "allow rw fsname=FS path=/..."). Use "" to clear a component.
+          replace: if True, only the provided components are kept; others are dropped.
+
+        Returns:
+          HTTP status (200/201/202 indicate success). Raises on hard errors.
+        """
+        # 1) Start from current caps (unless replace=True)
+        current: Dict[str, str] = {}
+        if not replace:
+            for u in self.auth_list():
+                if u.get("entity") == user_entity:
+                    current = dict(u.get("caps") or {})
+                    break
+
+        # 2) Merge with provided updates
+        new_caps: Dict[str, Optional[str]] = dict(current)
+        for comp, val in (("mds", mds), ("mon", mon), ("osd", osd), ("mgr", mgr)):
+            if val is not None:
+                new_caps[comp] = val  # allow "" to explicitly clear
+            elif replace:
+                # drop unspecified components if replace=True
+                new_caps.pop(comp, None)
+
+        # 3) Build Dashboard payload shape: list of {"type": "<comp>", "value": "<rule>"}
+        capabilities = [{"type": k, "value": (v if v is not None else "")} for k, v in new_caps.items()]
+
+        # 4) PUT to overwrite
+        status = self.update_user_caps(user_entity, capabilities)
+        if status not in (200, 201, 202):
+            raise RuntimeError(f"[{self.cluster_name}] auth_caps_set failed: HTTP {status}")
+        return status

@@ -144,7 +144,10 @@ def delete_subvolume(cluster, vol_name, subvol_name, group_name=None, force=None
             subvol_name=subvol_name,
             group_name=group_name,
             force=bool(force),
+            revoke_caps=True
         )
+
+        print("Would revoke:", result.get("caps_revoked_for"))
 
         errors: dict = (result.get("errors") or {})
         any_error = bool(errors)

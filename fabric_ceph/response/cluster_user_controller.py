@@ -163,7 +163,7 @@ def export_users(cluster, body):  # noqa: E501
 
     try:
         fabric_token, is_operator, bastion_login = authorize()
-        if len(export_users_request.entities) == 1 and bastion_login.lower() not in export_users_request.entities[0].lower():
+        if not is_operator and len(export_users_request.entities) == 1 and bastion_login.lower() not in export_users_request.entities[0].lower():
             return cors_401(details=f"{fabric_token.uuid}/{fabric_token.email} is not authorized!")
 
         if len(export_users_request.entities) > 1 and not is_operator:

@@ -1,5 +1,6 @@
 pytz
 fabric_ceph_client==1.0.0b7
+fabric_reports_client
 pandas
 matplotlib
 ipywidgets

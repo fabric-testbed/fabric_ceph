@@ -1,6 +1,7 @@
 # fabric_ceph/utils/cluster_user_helper.py
 from __future__ import annotations
 
+import json
 import logging
 from dataclasses import dataclass
 from http.client import BAD_REQUEST
@@ -17,6 +18,16 @@ from typing import Tuple
 
 # Stronger > weaker
 _PERM_ORDER = {"r": 0, "rw": 1, "rwps": 2}
+
+def _unescape_keyring_blob(s: str) -> str:
+    # export sometimes returns a JSON-escaped string; unescape if needed
+    s = str(s)
+    if (s.startswith('"') and s.endswith('"')) or ('\\n' in s or '\\"' in s):
+        try:
+            return json.loads(s)
+        except Exception:
+            return s
+    return s
 
 def _extract_caps_by_entity_from_keyring(keyring_text: str) -> Dict[str, str]:
     """Pull raw mon/mds/osd cap strings from a keyring blob."""
@@ -182,6 +193,7 @@ def ensure_user_on_cluster_with_cluster_paths_multi(
         # Read existing caps from keyring (if user exists)
         try:
             existing_keyring = dc.export_keyring(user_entity)
+            existing_keyring = _unescape_keyring_blob(existing_keyring)
             existing_map = _extract_caps_by_entity_from_keyring(existing_keyring) if existing_keyring else {}
             log.debug(f"existing keyring: {existing_keyring}")
         except Exception:
@@ -376,7 +388,7 @@ def export_users_on_cluster(
 
 
 if __name__ == "__main__":
-    existing = "[client.kthare10_0011904101]\n\tkey = AQDJN+VoeZugGBAABb4p6+y42l5o7vFDUS0FIg==\n\tcaps mds = \"allow rw fsname=CEPH-FS-01 path=/volumes/_nogroup/kthare10_0011904101/8a648e13-6e39-47b3-8245-d05a702aeb00\"\n\tcaps mon = \"allow r fsname=CEPH-FS-01\"\n\tcaps osd = \"allow rw tag cephfs data=CEPH-FS-01, allow rw tag cephfs metadata=CEPH-FS-01\"\n\n"
+    existing = "[client.kthare10_0011904101]\n\tkey = AQDJN+VoeZugGBAABb4p6+y42l5o7vFDUS0FIg==\n\tcaps mds = \"allow rw fsname=CEPH-FS-01 path=/volumes/_nogroup/kthare10_0011904101/8a648e13-6e39-47b3-8245-d05a702aeb00, allow rw fsname=CEPH-FS-01 path=/volumes/04b14c17-e66a-4405-98fc-d737717e2160/fabric-staff-no-permissions/c1431649-2b31-4a4b-8e62-2b71279433a3\"\n\tcaps mon = \"allow r fsname=CEPH-FS-01\"\n\tcaps osd = \"allow rw tag cephfs data=CEPH-FS-01, allow rw tag cephfs metadata=CEPH-FS-01\"\n\n"
     existing_map = _extract_caps_by_entity_from_keyring(existing)
     new_mds = 'allow rw fsname=CEPH-FS-01 path=/volumes/04b14c17-e66a-4405-98fc-d737717e2160/fabric-staff-no-permissions/c1431649-2b31-4a4b-8e62-2b71279433a3'
     merge = _format_mds_caps(_parse_mds_caps(existing_map.get("mds", "")) +

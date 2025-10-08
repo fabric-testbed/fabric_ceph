@@ -383,3 +383,54 @@ def list_subvolumes(cluster, vol_name, group_name=None, info=None):  # noqa: E50
     except Exception as e:
         log.exception("Failed processing list_subvolumes: %s", e)
         return cors_error_response(error=e)
+
+
+def delete_subvolume_group(cluster, vol_name, group_name=None, force=None):  # noqa: E501
+    """Delete a subvolume group
+
+     # noqa: E501
+
+    :param cluster: Target cluster/region identifier as defined by the service config.
+    :type cluster: str
+    :param vol_name: CephFS volume name (filesystem)
+    :type vol_name: str
+    :param group_name:
+    :type group_name: str
+    :param force: Force delete even if snapshots exist (behavior depends on cluster policy)
+    :type force: bool
+
+    :rtype: Union[Status200OkNoContent, Tuple[Status200OkNoContent, int], Tuple[Status200OkNoContent, int, Dict[str, str]]
+    """
+    g = get_globals()
+    log = g.log
+    log.debug("Processing CephFs delete_subvolume_group request")
+
+    try:
+        fabric_token, is_operator, _ = authorize()
+        # Restrict to operators; loosen if you have a project/user-based ACL to check here.
+        if not is_operator:
+            return cors_401(details=f"{fabric_token.uuid}/{fabric_token.email} is not authorized!")
+
+        cfg: Config = g.config
+
+        # Validate cluster and get client
+        try:
+            dc = _require_known_cluster(cfg, cluster)
+        except CephException as ce:
+            return cors_400(details=str(ce))
+
+        # DashClient call
+        dc.delete_subvolume_group(vol_name, group_name)
+
+        group_info = Status200OkNoContentData()
+        group_info.message = f"Subvolume group {group_name} deleted."
+        response = Status200OkNoContent()
+        response.data = [group_info]
+        response.size = len(response.data)
+        response.status = 200
+        response.type = "no_content"
+        return cors_success_response(response_body=response)
+
+    except Exception as e:
+        log.exception("Failed processing delete_subvolume_group: %s", e)
+        return cors_error_response(error=e)

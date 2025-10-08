@@ -313,9 +313,9 @@ def overwrite_user_caps(cluster, body):  # noqa: E501
         dc = DashClient.for_cluster(cluster, cfg.cluster[cluster])
 
         # PUT to Dashboard (overwrites caps)
-        status = dc.update_user_caps(user_entity, capabilities)
+        status, detail = dc.update_user_caps(user_entity, capabilities)
         if status not in (200, 201, 202):
-            return cors_500(details=f"Dashboard returned HTTP {status} while updating caps")
+            return cors_500(details=f"Dashboard returned HTTP {status}:{detail} while updating caps")
 
         # Build response
         info = Status200OkNoContentData()

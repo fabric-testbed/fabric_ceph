@@ -240,10 +240,11 @@ def ensure_user_on_cluster_with_cluster_paths_multi(
 
         log.debug(f"final caps: {final_caps}")
         # Apply (update → create fallback)
-        status = dc.update_user_caps(user_entity, final_caps)
+        status, detail = dc.update_user_caps(user_entity, final_caps)
         if status in (200, 201, 202):
             updated_on_source = True
         else:
+            log.error(f"failed to update user caps for {user_entity} details: {detail}")
             dc.create_user(user_entity, final_caps)
             created_on_source = True
             updated_on_source = True

@@ -24,6 +24,86 @@ tags:
 - name: version
 paths:
   /cephfs/subvolume/group/{vol_name}:
+    delete:
+      operationId: delete_subvolume_group
+      parameters:
+      - description: Target cluster/region identifier as defined by the service config.
+        explode: true
+        in: query
+        name: cluster
+        required: true
+        schema:
+          example: europe
+          type: string
+        style: form
+      - description: CephFS volume name (filesystem)
+        explode: false
+        in: path
+        name: vol_name
+        required: true
+        schema:
+          type: string
+        style: simple
+      - explode: true
+        in: query
+        name: group_name
+        required: false
+        schema:
+          type: string
+        style: form
+      - description: Force delete even if snapshots exist (behavior depends on cluster
+          policy)
+        explode: true
+        in: query
+        name: force
+        required: false
+        schema:
+          default: false
+          type: boolean
+        style: form
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/status_200_ok_no_content"
+          description: OK
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/status_400_bad_request"
+          description: Bad Request
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/status_401_unauthorized"
+          description: Unauthorized
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/status_403_forbidden"
+          description: Forbidden
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/status_404_not_found"
+          description: Not Found
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/status_500_internal_server_error"
+          description: Internal Server Error
+      security:
+      - bearerAuth: []
+      summary: Delete a subvolume group
+      tags:
+      - CephFS
+      x-openapi-router-controller: fabric_ceph.openapi_server.controllers.ceph_fs_controller
     get:
       description: |
         Lists subvolume groups for a filesystem. When `info=true`, implementations
@@ -1086,14 +1166,14 @@ components:
       type: object
     status_404_not_found:
       example:
-        size: 2
+        size: 1
         type: error
         errors:
         - details: details
           message: Not Found
         - details: details
           message: Not Found
-        status: 7
+        status: 5
       properties:
         errors:
           items:

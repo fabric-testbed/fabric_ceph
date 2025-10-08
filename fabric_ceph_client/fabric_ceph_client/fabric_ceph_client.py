@@ -557,3 +557,34 @@ class CephManagerClient:
             f"/cephfs/subvolume/group/{vol_name}",
             params=self._params_with_cluster(cluster, q),
         )
+
+
+    def delete_subvolume_group(
+        self,
+        cluster: str,
+        vol_name: str,
+        group_name: str,
+        *,
+        force: bool = False,
+    ) -> Dict[str, Any]:
+        """
+        DELETE /cephfs/subvolume/{vol_name}/group?cluster=<name>&group_name=...&force=(true|false)
+
+        Removes a subvolume group. Behavior:
+        - If force=false, server should require the group to be empty.
+        - If force=true, server may delete remaining subvolumes (implementation-specific).
+        """
+        if not group_name or not group_name.strip():
+            raise ValueError("group_name must be a non-empty string")
+        q = {"group_name": group_name, "force": str(bool(force)).lower()}
+        try:
+            return self._request(
+                "DELETE",
+                f"/cephfs/subvolume/{vol_name}/group",
+                params=self._params_with_cluster(cluster, q),
+            )
+        except ApiError as e:
+            # Graceful hint for GUI
+            if e.status == 404:
+                return {"status": 404, "message": "Group not found", "group_name": group_name}
+            raise

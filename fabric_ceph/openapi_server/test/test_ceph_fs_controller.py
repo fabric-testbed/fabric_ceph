@@ -61,6 +61,26 @@ class TestCephFSController(BaseTestCase):
         self.assert200(response,
                        'Response body is : ' + response.data.decode('utf-8'))
 
+    def test_delete_subvolume_group(self):
+        """Test case for delete_subvolume_group
+
+        Delete a subvolume group
+        """
+        query_string = [('cluster', 'europe'),
+                        ('group_name', 'group_name_example'),
+                        ('force', False)]
+        headers = { 
+            'Accept': 'application/json',
+            'Authorization': 'Bearer special-key',
+        }
+        response = self.client.open(
+            '/cephfs/subvolume/group/{vol_name}'.format(vol_name='vol_name_example'),
+            method='DELETE',
+            headers=headers,
+            query_string=query_string)
+        self.assert200(response,
+                       'Response body is : ' + response.data.decode('utf-8'))
+
     def test_get_subvolume_info(self):
         """Test case for get_subvolume_info
 

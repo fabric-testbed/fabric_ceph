@@ -27,7 +27,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Tuple
 
 from fabric_ceph.common.config import Config
 from fabric_ceph.utils.dash_client import DashClient
@@ -297,7 +297,10 @@ def _revoke_caps_for_path(
             if not dry_run:
                 # Prefer a method that updates just the mds caps to avoid accidental broadening.
                 if hasattr(dc, "auth_caps_set"):
-                    dc.auth_caps_set(entity, mds=new_mds)
+                    dc.auth_caps_set(entity,
+                                     mds=new_mds,
+                                     mon=caps.get("mon", ""),
+                                     osd=caps.get("osd", ""),)
                 elif hasattr(dc, "set_client_caps"):
                     # Fall back to setting all, preserving existing mon/osd caps.
                     dc.set_client_caps(

@@ -121,15 +121,20 @@ class DashClient:
             pass
         return r.text
 
-    def update_user_caps(self, user_entity: str, capabilities: List[Dict[str, str]]) -> int:
+    def update_user_caps(self, user_entity: str, capabilities: List[Dict[str, str]]) -> tuple[int, str]:
         """
         PUT /cluster/user to overwrite capabilities.
         Returns HTTP status code. 200/201/202 = OK; 400/404 often mean user missing.
         """
         payload = {"user_entity": user_entity, "capabilities": capabilities}
+        print(payload)
         r = requests.put(f"{self.base_api}/cluster/user", headers=self._hdrs(),
                          json=payload, timeout=60, verify=self.verify_tls)
-        return r.status_code
+        try:
+            detail = r.json()
+        except Exception:
+            detail = r.text
+        return r.status_code, detail
 
     # --- CephFS helpers ---
 
@@ -264,6 +269,20 @@ class DashClient:
                 detail = r.text
             raise RuntimeError(f"[{self.cluster_name}] subvolume delete failed: {r.status_code} {detail}")
 
+    def delete_subvolume_group(self, fs_name: str, group_name: str | None = None, force: bool = False) -> None:
+        """
+        DELETE /api/cephfs/subvolume/group/{vol_name}
+        """
+        url = f"{self.base_api}/cephfs/subvolume/group/{fs_name}"
+        params = {"group_name": group_name}
+        r = requests.delete(url, headers=self._hdrs(), params=params, timeout=60, verify=self.verify_tls)
+        if r.status_code not in (200, 202, 204):
+            try:
+                detail = r.json()
+            except Exception:
+                detail = r.text
+            raise RuntimeError(f"[{self.cluster_name}] subvolume group delete failed: {r.status_code} {detail}")
+
     def get_cluster_fsid(self) -> str:
         r = requests.get(f"{self.base_api}/health/get_cluster_fsid",
                          headers=self._hdrs(), timeout=60, verify=self.verify_tls)
@@ -385,9 +404,9 @@ class DashClient:
         capabilities = [{"type": k, "value": (v if v is not None else "")} for k, v in new_caps.items()]
 
         # 4) PUT to overwrite
-        status = self.update_user_caps(user_entity, capabilities)
+        status, detail = self.update_user_caps(user_entity, capabilities)
         if status not in (200, 201, 202):
-            raise RuntimeError(f"[{self.cluster_name}] auth_caps_set failed: HTTP {status}")
+            raise RuntimeError(f"[{self.cluster_name}] auth_caps_set failed: HTTP {status}: {detail}")
         return status
 
     def list_subvolumes(

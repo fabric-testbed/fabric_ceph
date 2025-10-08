@@ -10,7 +10,7 @@ def create_or_resize_subvolume(cluster, vol_name, body):  # noqa: E501
     :type cluster: str
     :param vol_name: CephFS volume name (filesystem), e.g. &#x60;CEPH-FS-01&#x60;
     :type vol_name: str
-    :param subvolume_create_or_resize_request: 
+    :param subvolume_create_or_resize_request:
     :type subvolume_create_or_resize_request: dict | bytes
 
     :rtype: Union[Status200OkNoContent, Tuple[Status200OkNoContent, int], Tuple[Status200OkNoContent, int, Dict[str, str]]
@@ -27,9 +27,9 @@ def delete_subvolume(cluster, vol_name, subvol_name, group_name=None, force=None
     :type cluster: str
     :param vol_name: CephFS volume name (filesystem)
     :type vol_name: str
-    :param subvol_name: 
+    :param subvol_name:
     :type subvol_name: str
-    :param group_name: 
+    :param group_name:
     :type group_name: str
     :param force: Force delete even if snapshots exist (behavior depends on cluster policy)
     :type force: bool
@@ -48,9 +48,9 @@ def get_subvolume_info(cluster, vol_name, subvol_name, group_name=None):  # noqa
     :type cluster: str
     :param vol_name: CephFS volume name (filesystem)
     :type vol_name: str
-    :param subvol_name: 
+    :param subvol_name:
     :type subvol_name: str
-    :param group_name: 
+    :param group_name:
     :type group_name: str
 
     :rtype: Union[Status200OkNoContent, Tuple[Status200OkNoContent, int], Tuple[Status200OkNoContent, int, Dict[str, str]]
@@ -84,7 +84,7 @@ def list_subvolumes(cluster, vol_name, group_name=None, info=None):  # noqa: E50
     :type cluster: str
     :param vol_name: CephFS volume name (filesystem)
     :type vol_name: str
-    :param group_name: 
+    :param group_name:
     :type group_name: str
     :param info: When true, return detailed objects per subvolume if supported.
     :type info: bool
@@ -101,13 +101,33 @@ def subvolume_exists(cluster, vol_name, subvol_name, group_name=None):  # noqa: 
 
     :param cluster: Target cluster/region identifier as defined by the service config.
     :type cluster: str
-    :param vol_name: 
+    :param vol_name:
     :type vol_name: str
-    :param subvol_name: 
+    :param subvol_name:
     :type subvol_name: str
-    :param group_name: 
+    :param group_name:
     :type group_name: str
 
     :rtype: Union[SubvolumeExists, Tuple[SubvolumeExists, int], Tuple[SubvolumeExists, int, Dict[str, str]]
     """
     return rc.subvolume_exists(cluster, vol_name, subvol_name, group_name)
+
+def delete_subvolume_group(cluster, vol_name, group_name=None, force=None):  # noqa: E501
+    """Delete a subvolume group
+
+     # noqa: E501
+
+    :param cluster: Target cluster/region identifier as defined by the service config.
+    :type cluster: str
+    :param vol_name: CephFS volume name (filesystem)
+    :type vol_name: str
+    :param group_name: 
+    :type group_name: str
+    :param force: Force delete even if snapshots exist (behavior depends on cluster policy)
+    :type force: bool
+
+    :rtype: Union[Status200OkNoContent, Tuple[Status200OkNoContent, int], Tuple[Status200OkNoContent, int, Dict[str, str]]
+    """
+    return rc.delete_subvolume_group(cluster, vol_name, group_name, force)
+
+

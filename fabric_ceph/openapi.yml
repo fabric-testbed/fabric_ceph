@@ -733,6 +733,69 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/status_500_internal_server_error' }
+    delete:
+      tags: [CephFS]
+      summary: Delete a subvolume group
+      operationId: deleteSubvolumeGroup
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/clusterParam'
+        - in: path
+          name: vol_name
+          required: true
+          schema:
+            type: string
+          description: CephFS volume name (filesystem)
+        - in: query
+          name: group_name
+          required: false
+          schema:
+            type: string
+        - in: query
+          name: force
+          required: false
+          schema:
+            type: boolean
+            default: false
+          description: Force delete even if snapshots exist (behavior depends on cluster policy)
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/status_200_ok_no_content'
+        "400":
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/status_400_bad_request'
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/status_401_unauthorized'
+        "403":
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/status_403_forbidden'
+        "404":
+          description: Not Found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/status_404_not_found'
+        "500":
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/status_500_internal_server_error'
 
 components:
 

@@ -293,22 +293,6 @@ def overwrite_user_caps(cluster, body):  # noqa: E501
             log.error(f"Failed processing CephX overwrite caps request: {user_entity}")
             return cors_400(details="'user_entity' is required and must be a string")
 
-        # Accept either:
-        #  - list[{"type": "mds", "value": "allow ..."}]  (preferred; matches OpenAPI)
-        #  - dict {"mds": "allow ...", "mon": "..."}      (we'll normalize it)
-        capabilities: List[Dict[str, str]] = []
-        if isinstance(caps_in, list):
-            # Validate items
-            for item in caps_in:
-                if not isinstance(item, dict) or "type" not in item or "value" not in item:
-                    return cors_400(details="Each capability must have 'type' and 'value'")
-                capabilities.append({"type": str(item["type"]), "value": str(item["value"])})
-        elif isinstance(caps_in, dict):
-            capabilities = [{"type": k, "value": v} for k, v in caps_in.items()]
-        else:
-            log.error(f"Failed processing CephX overwrite caps request: {caps_in}")
-            return cors_400(details="'capabilities' must be a list of {type,value} or a dict of component->rule")
-
         # Validate cluster & build client
         cfg: Config = g.config
         if cluster not in cfg.cluster:
@@ -318,8 +302,8 @@ def overwrite_user_caps(cluster, body):  # noqa: E501
         dc = DashClient.for_cluster(cluster, cfg.cluster[cluster])
 
         # PUT to Dashboard (overwrites caps)
+        capabilities = normalize_kv_caps(caps_in)
         log.debug(f"Processing CephX overwrite caps request entity: {user_entity} capabilities: {capabilities}")
-        capabilities = normalize_kv_caps(capabilities)
         status, detail = dc.update_user_caps(user_entity, capabilities)
         if status not in (200, 201, 202):
             log.error(f"Failed processing CephX overwrite caps request: {status}: {detail}")

@@ -15,7 +15,7 @@ from fabric_ceph.openapi_server.models import (
 from fabric_ceph.openapi_server.models.export_users_request import ExportUsersRequest  # noqa: E501
 from fabric_ceph.response.cors_response import cors_401, cors_400, cors_500, cors_200
 from fabric_ceph.utils.dash_client import DashClient
-from fabric_ceph.utils.utils import cors_success_response, cors_error_response, authorize
+from fabric_ceph.utils.utils import cors_success_response, cors_error_response, authorize, normalize_kv_caps
 
 # UPDATED: per-cluster helper imports
 from fabric_ceph.utils.cluster_user_helper import (
@@ -319,6 +319,7 @@ def overwrite_user_caps(cluster, body):  # noqa: E501
 
         # PUT to Dashboard (overwrites caps)
         log.debug(f"Processing CephX overwrite caps request entity: {user_entity} capabilities: {capabilities}")
+        capabilities = normalize_kv_caps(capabilities)
         status, detail = dc.update_user_caps(user_entity, capabilities)
         if status not in (200, 201, 202):
             log.error(f"Failed processing CephX overwrite caps request: {status}: {detail}")

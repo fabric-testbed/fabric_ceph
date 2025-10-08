@@ -143,7 +143,7 @@ def norm_cap_kv(it: Dict[str, str]) -> Dict[str, str]:
     v = it.get("value") or it.get("cap") or it.get("caps")
     if not t or v is None:
         raise ValueError("Each capability must include 'type'/'entity' and 'value'/'cap'")
-    return {"type": str(t), "value": str(v)}
+    return {"entity": str(t), "cap": str(v)}
 
 def normalize_kv_caps(items: Union[List[Dict[str, str]], Dict[str, str]]) -> List[Dict[str, str]]:
     """
@@ -153,7 +153,7 @@ def normalize_kv_caps(items: Union[List[Dict[str, str]], Dict[str, str]]) -> Lis
     Into list[{type, value}].
     """
     if isinstance(items, dict):
-        return [{"type": str(k), "value": str(v)} for k, v in items.items()]
+        return [{"entity": str(k), "cap": str(v)} for k, v in items.items()]
     if isinstance(items, list):
         return [norm_cap_kv(i) for i in items]
     raise ValueError("'capabilities' must be a list of objects or a dict of component->rule")

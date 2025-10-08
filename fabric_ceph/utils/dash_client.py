@@ -362,28 +362,23 @@ class DashClient:
         return out
 
     def auth_caps_set(
-        self,
-        user_entity: str,
-        *,
-        mds: Optional[str] = None,
-        mon: Optional[str] = None,
-        osd: Optional[str] = None,
-        mgr: Optional[str] = None,
-        replace: bool = False,
+            self,
+            user_entity: str,
+            *,
+            mds: Optional[str] = None,
+            mon: Optional[str] = None,
+            osd: Optional[str] = None,
+            mgr: Optional[str] = None,
+            replace: bool = False,
     ) -> int:
         """
-        Overwrite a user's caps on the Dashboard API. By default, merges with existing caps so
-        you can change just one component (e.g., mds) safely.
+        Overwrite a user's caps via Dashboard/Manager API.
 
-        Args:
-          user_entity: "client.username" (exact CephX entity)
-          mds/mon/osd/mgr: new values (e.g., "allow rw fsname=FS path=/..."). Use "" to clear a component.
-          replace: if True, only the provided components are kept; others are dropped.
-
-        Returns:
-          HTTP status (200/201/202 indicate success). Raises on hard errors.
+        - If replace=False (default), we merge with current caps (so you can tweak only mds).
+        - If replace=True, we keep only the provided components; others are dropped.
+        - To explicitly clear a component, pass "" (empty string) for that component.
         """
-        # 1) Start from current caps (unless replace=True)
+        # 1) Start from current caps if not replacing
         current: Dict[str, str] = {}
         if not replace:
             for u in self.auth_list():
@@ -391,19 +386,25 @@ class DashClient:
                     current = dict(u.get("caps") or {})
                     break
 
-        # 2) Merge with provided updates
-        new_caps: Dict[str, Optional[str]] = dict(current)
+        # 2) Merge according to arguments
+        new_caps_map: Dict[str, Optional[str]] = dict(current)
         for comp, val in (("mds", mds), ("mon", mon), ("osd", osd), ("mgr", mgr)):
             if val is not None:
-                new_caps[comp] = val  # allow "" to explicitly clear
+                # include explicit empty "" if caller wants to clear
+                new_caps_map[comp] = val
             elif replace:
-                # drop unspecified components if replace=True
-                new_caps.pop(comp, None)
+                new_caps_map.pop(comp, None)
 
-        # 3) Build Dashboard payload shape: list of {"type": "<comp>", "value": "<rule>"}
-        capabilities = [{"type": k, "value": (v if v is not None else "")} for k, v in new_caps.items()]
+        # 3) Build correct payload shape: [{"entity": "<comp>", "cap": "<rule>"}]
+        capabilities: List[Dict[str, str]] = []
+        for k, v in new_caps_map.items():
+            if v is None and replace:
+                # skip entirely if replacing and unspecified
+                continue
+            # Use empty string to clear a component (allowed by ceph auth caps)
+            capabilities.append({"entity": k, "cap": (v if v is not None else "")})
 
-        # 4) PUT to overwrite
+        # 4) PUT
         status, detail = self.update_user_caps(user_entity, capabilities)
         if status not in (200, 201, 202):
             raise RuntimeError(f"[{self.cluster_name}] auth_caps_set failed: HTTP {status}: {detail}")

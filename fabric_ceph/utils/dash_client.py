@@ -24,7 +24,7 @@
 #
 # Author: Komal Thareja (kthare10@renci.org)
 from dataclasses import dataclass
-from typing import Dict, List, Tuple, Optional, Any
+from typing import Dict, List, Tuple, Optional, Any, Union
 from urllib.parse import urlparse
 
 import requests
@@ -389,3 +389,79 @@ class DashClient:
         if status not in (200, 201, 202):
             raise RuntimeError(f"[{self.cluster_name}] auth_caps_set failed: HTTP {status}")
         return status
+
+    def list_subvolumes(
+        self,
+        fs_name: str,
+        group_name: Optional[str] = None,
+        info: bool = False,
+        timeout: int = 60,
+    ) -> List[Union[str, Dict[str, Any]]]:
+        """
+        List CephFS subvolumes for a filesystem (optionally filtered by group).
+        If info=True, the API may return detailed objects instead of names.
+
+        Returns a list of subvolume names (str) or dicts, depending on server.
+        """
+        url = f"{self.base_api}/cephfs/subvolume/{fs_name}"
+        params: Dict[str, Any] = {}
+        if group_name:
+            params["group_name"] = group_name
+        if info:
+            params["info"] = "true"
+
+        r = requests.get(url, headers=self._hdrs(), params=params,
+                         timeout=timeout, verify=self.verify_tls)
+        r.raise_for_status()
+        js = r.json()
+
+        # Common shapes:
+        # - list[str] or list[dict]
+        if isinstance(js, list):
+            return js
+
+        # - {"data": [...] } or {"subvolumes": [...] } or {"result":[...]} etc.
+        if isinstance(js, dict):
+            for key in ("data", "subvolumes", "result", "output"):
+                if isinstance(js.get(key), list):
+                    return js[key]  # type: ignore[return-value]
+
+            # Fallback: dict-of-name->info
+            if all(isinstance(k, str) for k in js.keys()):
+                out: List[Dict[str, Any]] = []
+                for name, val in js.items():
+                    if isinstance(val, dict):
+                        out.append({"name": name, **val})
+                    else:
+                        out.append({"name": name, "value": val})
+                return out
+
+        # Unknown shape
+        return []
+
+    def list_subvolume_groups(
+        self,
+        fs_name: str,
+        info: bool = False,
+        timeout: int = 60,
+    ) -> List[Union[str, Dict[str, Any]]]:
+        """
+        List CephFS subvolume groups for a filesystem.
+        """
+        url = f"{self.base_api}/cephfs/subvolume/group/{fs_name}"
+        params: Dict[str, Any] = {}
+        if info:
+            params["info"] = "true"
+
+        r = requests.get(url, headers=self._hdrs(), params=params,
+                         timeout=timeout, verify=self.verify_tls)
+        r.raise_for_status()
+        js = r.json()
+
+        if isinstance(js, list):
+            return js
+        if isinstance(js, dict):
+            for key in ("data", "groups", "result", "output"):
+                if isinstance(js.get(key), list):
+                    return js[key]  # type: ignore[return-value]
+        return []

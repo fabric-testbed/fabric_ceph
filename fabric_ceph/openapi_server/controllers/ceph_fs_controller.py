@@ -1,5 +1,6 @@
 from fabric_ceph.response import ceph_fs_controller as rc
 
+
 def create_or_resize_subvolume(cluster, vol_name, body):  # noqa: E501
     """Create or resize a subvolume
 
@@ -35,7 +36,7 @@ def delete_subvolume(cluster, vol_name, subvol_name, group_name=None, force=None
 
     :rtype: Union[Status200OkNoContent, Tuple[Status200OkNoContent, int], Tuple[Status200OkNoContent, int, Dict[str, str]]
     """
-    return rc.delete_subvolume(cluster, vol_name, subvol_name, group_name, force=force)
+    return rc.delete_subvolume(cluster, vol_name, subvol_name, group_name, force)
 
 
 def get_subvolume_info(cluster, vol_name, subvol_name, group_name=None):  # noqa: E501
@@ -55,6 +56,42 @@ def get_subvolume_info(cluster, vol_name, subvol_name, group_name=None):  # noqa
     :rtype: Union[Status200OkNoContent, Tuple[Status200OkNoContent, int], Tuple[Status200OkNoContent, int, Dict[str, str]]
     """
     return rc.get_subvolume_info(cluster, vol_name, subvol_name, group_name)
+
+
+def list_subvolume_groups(cluster, vol_name, info=None):  # noqa: E501
+    """List subvolume groups
+
+    Lists subvolume groups for a filesystem. When &#x60;info&#x3D;true&#x60;, implementations may return detailed objects per group; otherwise names.  # noqa: E501
+
+    :param cluster: Target cluster/region identifier as defined by the service config.
+    :type cluster: str
+    :param vol_name: CephFS volume name (filesystem)
+    :type vol_name: str
+    :param info: When true, return detailed objects per group if supported.
+    :type info: bool
+
+    :rtype: Union[SubvolumeGroupList, Tuple[SubvolumeGroupList, int], Tuple[SubvolumeGroupList, int, Dict[str, str]]
+    """
+    return rc.list_subvolume_groups(cluster, vol_name, info=info)
+
+
+def list_subvolumes(cluster, vol_name, group_name=None, info=None):  # noqa: E501
+    """List subvolumes
+
+    Lists subvolumes for a filesystem. If &#x60;group_name&#x60; is passed, results are filtered to that group. When &#x60;info&#x3D;true&#x60;, implementations may return detailed objects instead of simple names.  # noqa: E501
+
+    :param cluster: Target cluster/region identifier as defined by the service config.
+    :type cluster: str
+    :param vol_name: CephFS volume name (filesystem)
+    :type vol_name: str
+    :param group_name: 
+    :type group_name: str
+    :param info: When true, return detailed objects per subvolume if supported.
+    :type info: bool
+
+    :rtype: Union[SubvolumeList, Tuple[SubvolumeList, int], Tuple[SubvolumeList, int, Dict[str, str]]
+    """
+    return rc.list_subvolumes(cluster, vol_name, group_name, info=info)
 
 
 def subvolume_exists(cluster, vol_name, subvol_name, group_name=None):  # noqa: E501

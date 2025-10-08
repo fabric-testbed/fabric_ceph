@@ -2,6 +2,7 @@ from typing import Dict, List, Any
 
 import connexion
 
+from fabric_ceph.common.config import Config
 from fabric_ceph.common.globals import get_globals
 from fabric_ceph.openapi_server.models import (
     Users,
@@ -13,6 +14,7 @@ from fabric_ceph.openapi_server.models import (
 )
 from fabric_ceph.openapi_server.models.export_users_request import ExportUsersRequest  # noqa: E501
 from fabric_ceph.response.cors_response import cors_401, cors_400, cors_500, cors_200
+from fabric_ceph.utils.dash_client import DashClient
 from fabric_ceph.utils.utils import cors_success_response, cors_error_response, authorize
 
 # UPDATED: per-cluster helper imports
@@ -254,9 +256,83 @@ def list_users(cluster):  # noqa: E501
         log.exception(f"Failed processing CephX list request: {e}")
         return cors_error_response(error=e)
 
+def overwrite_user_caps(cluster, body):  # noqa: E501
+    """Overwrite capabilities for an existing CephX user (non-templated)
 
-if __name__ == "__main__":
+    Overwrites a user&#39;s capabilities with the provided list. Commonly used to adjust a single component (e.g., &#x60;mds&#x60;) while preserving others (&#x60;mon&#x60;, &#x60;osd&#x60;, &#x60;mgr&#x60;).  # noqa: E501
 
-    temp = {'entity': 'client.ceph-exporter.hawi-osd', 'caps': {'mgr': 'allow r', 'mon': 'profile ceph-exporter', 'osd': 'allow r'}, 'key': '***********'}
-    abc = CephUser.from_dict(temp)
-    print(abc.to_dict())
+    :param cluster: Target cluster/region identifier as defined by the service config.
+    :type cluster: str
+    :param update_user_caps_request:
+    :type update_user_caps_request: dict | bytes
+
+    :rtype: Union[Status200OkNoContent, Tuple[Status200OkNoContent, int], Tuple[Status200OkNoContent, int, Dict[str, str]]
+    """
+    g = get_globals()
+    log = g.log
+    log.debug("Processing CephX overwrite caps request")
+
+    try:
+        fabric_token, is_operator, _ = authorize()
+        if not is_operator:
+            return cors_401(details=f"{fabric_token.uuid}/{fabric_token.email} is not authorized!")
+
+        # Parse/normalize body
+        if connexion.request.is_json:
+            body = connexion.request.get_json()
+
+        if not isinstance(body, dict):
+            return cors_400(details="Request body must be JSON object")
+
+        user_entity = body.get("user_entity")
+        caps_in = body.get("capabilities")
+
+        if not user_entity or not isinstance(user_entity, str):
+            return cors_400(details="'user_entity' is required and must be a string")
+
+        # Accept either:
+        #  - list[{"type": "mds", "value": "allow ..."}]  (preferred; matches OpenAPI)
+        #  - dict {"mds": "allow ...", "mon": "..."}      (we'll normalize it)
+        capabilities: List[Dict[str, str]] = []
+        if isinstance(caps_in, list):
+            # Validate items
+            for item in caps_in:
+                if not isinstance(item, dict) or "type" not in item or "value" not in item:
+                    return cors_400(details="Each capability must have 'type' and 'value'")
+                capabilities.append({"type": str(item["type"]), "value": str(item["value"])})
+        elif isinstance(caps_in, dict):
+            capabilities = [{"type": k, "value": v} for k, v in caps_in.items()]
+        else:
+            return cors_400(details="'capabilities' must be a list of {type,value} or a dict of component->rule")
+
+        # Validate cluster & build client
+        cfg: Config = g.config
+        if cluster not in cfg.cluster:
+            return cors_400(details=f"Unknown cluster '{cluster}'")
+
+        dc = DashClient.for_cluster(cluster, cfg.cluster[cluster])
+
+        # PUT to Dashboard (overwrites caps)
+        status = dc.update_user_caps(user_entity, capabilities)
+        if status not in (200, 201, 202):
+            return cors_500(details=f"Dashboard returned HTTP {status} while updating caps")
+
+        # Build response
+        info = Status200OkNoContentData()
+        info.message = f"User {user_entity} capabilities overwritten."
+        info.details = {
+            "cluster": cluster,
+            "user_entity": user_entity,
+            "capabilities": capabilities,
+            "http_status": status,
+        }
+        resp = Status200OkNoContent()
+        resp.data = [info]
+        resp.size = 1
+        resp.status = 200
+        resp.type = "no_content"
+        return cors_success_response(response_body=resp)
+
+    except Exception as e:
+        log.exception("Failed processing CephX overwrite caps request: %s", e)
+        return cors_error_response(error=e)

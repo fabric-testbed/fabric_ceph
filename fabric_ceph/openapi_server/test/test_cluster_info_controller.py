@@ -2,12 +2,12 @@ import unittest
 
 from flask import json
 
-from fabric_ceph.fabric_ceph.openapi_server.models.cluster_info_list import ClusterInfoList  # noqa: E501
-from fabric_ceph.fabric_ceph.openapi_server.models.status400_bad_request import Status400BadRequest  # noqa: E501
-from fabric_ceph.fabric_ceph.openapi_server.models.status401_unauthorized import Status401Unauthorized  # noqa: E501
-from fabric_ceph.fabric_ceph.openapi_server.models.status403_forbidden import Status403Forbidden  # noqa: E501
-from fabric_ceph.fabric_ceph.openapi_server.models.status500_internal_server_error import Status500InternalServerError  # noqa: E501
-from fabric_ceph.fabric_ceph.openapi_server.test import BaseTestCase
+from fabric_ceph.openapi_server.models.cluster_info_list import ClusterInfoList  # noqa: E501
+from fabric_ceph.openapi_server.models.status400_bad_request import Status400BadRequest  # noqa: E501
+from fabric_ceph.openapi_server.models.status401_unauthorized import Status401Unauthorized  # noqa: E501
+from fabric_ceph.openapi_server.models.status403_forbidden import Status403Forbidden  # noqa: E501
+from fabric_ceph.openapi_server.models.status500_internal_server_error import Status500InternalServerError  # noqa: E501
+from fabric_ceph.openapi_server.test import BaseTestCase
 
 
 class TestClusterInfoController(BaseTestCase):

@@ -7,7 +7,7 @@ from fabric_ceph.common.globals import get_globals
 from fabric_ceph.openapi_server.models import (
     SubvolumeExists,
     Status200OkNoContentData,
-    Status200OkNoContent,
+    Status200OkNoContent, SubvolumeGroupList, SubvolumeList,
 )
 from fabric_ceph.openapi_server.models.subvolume_create_or_resize_request import (
     SubvolumeCreateOrResizeRequest,  # noqa: E501
@@ -173,7 +173,7 @@ def delete_subvolume(cluster, vol_name, subvol_name, group_name=None, force=None
 def get_subvolume_info(cluster, vol_name, subvol_name, group_name=None):  # noqa: E501
     """Get subvolume info (path)
 
-    Returns subvolume details; use the `path` field as the mount path (equivalent to `getpath`). # noqa: E501
+    Returns subvolume details; use the &#x60;path&#x60; field as the mount path (equivalent to &#x60;getpath&#x60;). # noqa: E501
 
     :param cluster: Target cluster/region identifier as defined by the service config.
     :type cluster: str
@@ -184,7 +184,7 @@ def get_subvolume_info(cluster, vol_name, subvol_name, group_name=None):  # noqa
     :param group_name:
     :type group_name: str
 
-    :rtype: Union[SubvolumeInfo, Tuple[SubvolumeInfo, int], Tuple[SubvolumeInfo, int, Dict[str, str]]
+    :rtype: Union[Status200OkNoContent, Tuple[Status200OkNoContent, int], Tuple[Status200OkNoContent, int, Dict[str, str]]
     """
     g = get_globals()
     log = g.log
@@ -274,4 +274,112 @@ def subvolume_exists(cluster, vol_name, subvol_name, group_name=None):  # noqa: 
 
     except Exception as e:
         g.log.exception(e)
+        return cors_error_response(error=e)
+
+
+def list_subvolume_groups(cluster, vol_name, info=None):  # noqa: E501
+    """List subvolume groups
+
+    Lists subvolume groups for a filesystem. When &#x60;info&#x3D;true&#x60;, implementations may return detailed objects per group; otherwise names.  # noqa: E501
+
+    :param cluster: Target cluster/region identifier as defined by the service config.
+    :type cluster: str
+    :param vol_name: CephFS volume name (filesystem)
+    :type vol_name: str
+    :param info: When true, return detailed objects per group if supported.
+    :type info: bool
+
+    :rtype: Union[SubvolumeGroupList, Tuple[SubvolumeGroupList, int], Tuple[SubvolumeGroupList, int, Dict[str, str]]
+    """
+    g = get_globals()
+    log = g.log
+    log.debug("Processing CephFs list_subvolume_groups request")
+
+    try:
+        fabric_token, is_operator, _ = authorize()
+        # Restrict to operators; loosen if you have a project/user-based ACL to check here.
+        if not is_operator:
+            return cors_401(details=f"{fabric_token.uuid}/{fabric_token.email} is not authorized!")
+
+        cfg: Config = g.config
+
+        # Validate cluster and get client
+        try:
+            dc = _require_known_cluster(cfg, cluster)
+        except CephException as ce:
+            return cors_400(details=str(ce))
+
+        # Normalize info to bool
+        info_flag = bool(info) if info is not None else False
+
+        # DashClient call
+        groups = dc.list_subvolume_groups(vol_name, info=info_flag)
+
+        # Build response (paginated-style envelope)
+        resp = SubvolumeGroupList()
+        resp.type = "subvolume_groups"
+        resp.data = groups if isinstance(groups, list) else []
+        resp.size = len(resp.data)
+        resp.total = len(resp.data)
+        resp.limit = len(resp.data)
+        resp.offset = 0
+        resp.status = 200
+        return cors_success_response(response_body=resp)
+
+    except Exception as e:
+        log.exception("Failed processing list_subvolume_groups: %s", e)
+        return cors_error_response(error=e)
+
+def list_subvolumes(cluster, vol_name, group_name=None, info=None):  # noqa: E501
+    """List subvolumes
+
+    Lists subvolumes for a filesystem. If &#x60;group_name&#x60; is passed, results are filtered to that group. When &#x60;info&#x3D;true&#x60;, implementations may return detailed objects instead of simple names.  # noqa: E501
+
+    :param cluster: Target cluster/region identifier as defined by the service config.
+    :type cluster: str
+    :param vol_name: CephFS volume name (filesystem)
+    :type vol_name: str
+    :param group_name:
+    :type group_name: str
+    :param info: When true, return detailed objects per subvolume if supported.
+    :type info: bool
+
+    :rtype: Union[SubvolumeList, Tuple[SubvolumeList, int], Tuple[SubvolumeList, int, Dict[str, str]]
+    """
+    g = get_globals()
+    log = g.log
+    log.debug("Processing CephFs list_subvolumes request")
+
+    try:
+        fabric_token, is_operator, _ = authorize()
+        # Restrict to operators; loosen if you have a project/user-based ACL to check here.
+        if not is_operator:
+            return cors_401(details=f"{fabric_token.uuid}/{fabric_token.email} is not authorized!")
+
+        cfg: Config = g.config
+
+        # Validate cluster and get client
+        try:
+            dc = _require_known_cluster(cfg, cluster)
+        except CephException as ce:
+            return cors_400(details=str(ce))
+
+        info_flag = bool(info) if info is not None else False
+
+        # DashClient call
+        items = dc.list_subvolumes(vol_name, group_name=group_name, info=info_flag)
+
+        # Build response (paginated-style envelope)
+        resp = SubvolumeList()
+        resp.type = "subvolumes"
+        resp.data = items if isinstance(items, list) else []
+        resp.size = len(resp.data)
+        resp.total = len(resp.data)
+        resp.limit = len(resp.data)
+        resp.offset = 0
+        resp.status = 200
+        return cors_success_response(response_body=resp)
+
+    except Exception as e:
+        log.exception("Failed processing list_subvolumes: %s", e)
         return cors_error_response(error=e)

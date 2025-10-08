@@ -267,7 +267,7 @@ class ApplyUserResponse(Model):
     def caps_applied(self) -> Dict[str, List[Capability]]:
         """Gets the caps_applied of this ApplyUserResponse.
 
-        Map cluster -> rendered caps actually applied  # noqa: E501
+        Map cluster → rendered caps actually applied  # noqa: E501
 
         :return: The caps_applied of this ApplyUserResponse.
         :rtype: Dict[str, List[Capability]]
@@ -278,7 +278,7 @@ class ApplyUserResponse(Model):
     def caps_applied(self, caps_applied: Dict[str, List[Capability]]):
         """Sets the caps_applied of this ApplyUserResponse.
 
-        Map cluster -> rendered caps actually applied  # noqa: E501
+        Map cluster → rendered caps actually applied  # noqa: E501
 
         :param caps_applied: The caps_applied of this ApplyUserResponse.
         :type caps_applied: Dict[str, List[Capability]]
@@ -290,7 +290,7 @@ class ApplyUserResponse(Model):
     def paths(self) -> Dict[str, str]:
         """Gets the paths of this ApplyUserResponse.
 
-        Map cluster -> resolved subvolume path  # noqa: E501
+        Map cluster → resolved subvolume path  # noqa: E501
 
         :return: The paths of this ApplyUserResponse.
         :rtype: Dict[str, str]
@@ -301,7 +301,7 @@ class ApplyUserResponse(Model):
     def paths(self, paths: Dict[str, str]):
         """Sets the paths of this ApplyUserResponse.
 
-        Map cluster -> resolved subvolume path  # noqa: E501
+        Map cluster → resolved subvolume path  # noqa: E501
 
         :param paths: The paths of this ApplyUserResponse.
         :type paths: Dict[str, str]
@@ -313,7 +313,7 @@ class ApplyUserResponse(Model):
     def errors(self) -> Dict[str, str]:
         """Gets the errors of this ApplyUserResponse.
 
-        Map cluster -> error string (if any)  # noqa: E501
+        Map cluster → error string (if any)  # noqa: E501
 
         :return: The errors of this ApplyUserResponse.
         :rtype: Dict[str, str]
@@ -324,7 +324,7 @@ class ApplyUserResponse(Model):
     def errors(self, errors: Dict[str, str]):
         """Sets the errors of this ApplyUserResponse.
 
-        Map cluster -> error string (if any)  # noqa: E501
+        Map cluster → error string (if any)  # noqa: E501
 
         :param errors: The errors of this ApplyUserResponse.
         :type errors: Dict[str, str]

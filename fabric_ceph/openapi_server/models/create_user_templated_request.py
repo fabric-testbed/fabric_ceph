@@ -16,7 +16,7 @@ class CreateUserTemplatedRequest(Model):
     Do not edit the class manually.
     """
 
-    def __init__(self, user_entity=None, template_capabilities=None, renders=None, sync_across_clusters=True, preferred_source=None):  # noqa: E501
+    def __init__(self, user_entity=None, template_capabilities=None, renders=None, merge_strategy='multi', sync_across_clusters=True, preferred_source=None):  # noqa: E501
         """CreateUserTemplatedRequest - a model defined in OpenAPI
 
         :param user_entity: The user_entity of this CreateUserTemplatedRequest.  # noqa: E501
@@ -25,6 +25,8 @@ class CreateUserTemplatedRequest(Model):
         :type template_capabilities: List[CapabilityTemplate]
         :param renders: The renders of this CreateUserTemplatedRequest.  # noqa: E501
         :type renders: List[CapRenderContext]
+        :param merge_strategy: The merge_strategy of this CreateUserTemplatedRequest.  # noqa: E501
+        :type merge_strategy: str
         :param sync_across_clusters: The sync_across_clusters of this CreateUserTemplatedRequest.  # noqa: E501
         :type sync_across_clusters: bool
         :param preferred_source: The preferred_source of this CreateUserTemplatedRequest.  # noqa: E501
@@ -34,6 +36,7 @@ class CreateUserTemplatedRequest(Model):
             'user_entity': str,
             'template_capabilities': List[CapabilityTemplate],
             'renders': List[CapRenderContext],
+            'merge_strategy': str,
             'sync_across_clusters': bool,
             'preferred_source': str
         }
@@ -42,6 +45,7 @@ class CreateUserTemplatedRequest(Model):
             'user_entity': 'user_entity',
             'template_capabilities': 'template_capabilities',
             'renders': 'renders',
+            'merge_strategy': 'mergeStrategy',
             'sync_across_clusters': 'sync_across_clusters',
             'preferred_source': 'preferred_source'
         }
@@ -49,6 +53,7 @@ class CreateUserTemplatedRequest(Model):
         self._user_entity = user_entity
         self._template_capabilities = template_capabilities
         self._renders = renders
+        self._merge_strategy = merge_strategy
         self._sync_across_clusters = sync_across_clusters
         self._preferred_source = preferred_source
 
@@ -135,6 +140,33 @@ class CreateUserTemplatedRequest(Model):
             raise ValueError("Invalid value for `renders`, number of items must be greater than or equal to `1`")  # noqa: E501
 
         self._renders = renders
+
+    @property
+    def merge_strategy(self) -> str:
+        """Gets the merge_strategy of this CreateUserTemplatedRequest.
+
+
+        :return: The merge_strategy of this CreateUserTemplatedRequest.
+        :rtype: str
+        """
+        return self._merge_strategy
+
+    @merge_strategy.setter
+    def merge_strategy(self, merge_strategy: str):
+        """Sets the merge_strategy of this CreateUserTemplatedRequest.
+
+
+        :param merge_strategy: The merge_strategy of this CreateUserTemplatedRequest.
+        :type merge_strategy: str
+        """
+        allowed_values = ["multi", "replace"]  # noqa: E501
+        if merge_strategy not in allowed_values:
+            raise ValueError(
+                "Invalid value for `merge_strategy` ({0}), must be one of {1}"
+                .format(merge_strategy, allowed_values)
+            )
+
+        self._merge_strategy = merge_strategy
 
     @property
     def sync_across_clusters(self) -> bool:

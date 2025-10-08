@@ -2,18 +2,19 @@ import unittest
 
 from flask import json
 
-from fabric_ceph.fabric_ceph.openapi_server.models.apply_user_response import ApplyUserResponse  # noqa: E501
-from fabric_ceph.fabric_ceph.openapi_server.models.create_user_templated_request import CreateUserTemplatedRequest  # noqa: E501
-from fabric_ceph.fabric_ceph.openapi_server.models.export_users_request import ExportUsersRequest  # noqa: E501
-from fabric_ceph.fabric_ceph.openapi_server.models.export_users_response import ExportUsersResponse  # noqa: E501
-from fabric_ceph.fabric_ceph.openapi_server.models.status200_ok_no_content import Status200OkNoContent  # noqa: E501
-from fabric_ceph.fabric_ceph.openapi_server.models.status400_bad_request import Status400BadRequest  # noqa: E501
-from fabric_ceph.fabric_ceph.openapi_server.models.status401_unauthorized import Status401Unauthorized  # noqa: E501
-from fabric_ceph.fabric_ceph.openapi_server.models.status403_forbidden import Status403Forbidden  # noqa: E501
-from fabric_ceph.fabric_ceph.openapi_server.models.status404_not_found import Status404NotFound  # noqa: E501
-from fabric_ceph.fabric_ceph.openapi_server.models.status500_internal_server_error import Status500InternalServerError  # noqa: E501
-from fabric_ceph.fabric_ceph.openapi_server.models.users import Users  # noqa: E501
-from fabric_ceph.fabric_ceph.openapi_server.test import BaseTestCase
+from fabric_ceph.openapi_server.models.apply_user_response import ApplyUserResponse  # noqa: E501
+from fabric_ceph.openapi_server.models.create_user_templated_request import CreateUserTemplatedRequest  # noqa: E501
+from fabric_ceph.openapi_server.models.export_users_request import ExportUsersRequest  # noqa: E501
+from fabric_ceph.openapi_server.models.export_users_response import ExportUsersResponse  # noqa: E501
+from fabric_ceph.openapi_server.models.status200_ok_no_content import Status200OkNoContent  # noqa: E501
+from fabric_ceph.openapi_server.models.status400_bad_request import Status400BadRequest  # noqa: E501
+from fabric_ceph.openapi_server.models.status401_unauthorized import Status401Unauthorized  # noqa: E501
+from fabric_ceph.openapi_server.models.status403_forbidden import Status403Forbidden  # noqa: E501
+from fabric_ceph.openapi_server.models.status404_not_found import Status404NotFound  # noqa: E501
+from fabric_ceph.openapi_server.models.status500_internal_server_error import Status500InternalServerError  # noqa: E501
+from fabric_ceph.openapi_server.models.update_user_caps_request import UpdateUserCapsRequest  # noqa: E501
+from fabric_ceph.openapi_server.models.users import Users  # noqa: E501
+from fabric_ceph.openapi_server.test import BaseTestCase
 
 
 class TestClusterUserController(BaseTestCase):
@@ -22,9 +23,9 @@ class TestClusterUserController(BaseTestCase):
     def test_apply_user_templated(self):
         """Test case for apply_user_templated
 
-        Upsert a CephX user with cluster-specific capabilities
+        Upsert a CephX user with cluster-specific capabilities (templated)
         """
-        create_user_templated_request = {"user_entity":"client.project123","renders":[{"subvol_name":"project123","group_name":"fabric_staff","fs_name":"CEPH-FS-01"},{"subvol_name":"project123","group_name":"fabric_staff","fs_name":"CEPH-FS-01"}],"preferred_source":"europe","template_capabilities":[{"cap":"allow rw fsname={fs} path={path}","entity":"mds"},{"cap":"allow rw fsname={fs} path={path}","entity":"mds"}],"sync_across_clusters":True}
+        create_user_templated_request = {"user_entity":"client.project123","renders":[{"subvol_name":"project123","group_name":"fabric_staff","fs_name":"CEPH-FS-01"},{"subvol_name":"project123","group_name":"fabric_staff","fs_name":"CEPH-FS-01"}],"mergeStrategy":"multi","preferred_source":"europe","template_capabilities":[{"cap":"allow rw fsname={fs} path={path}","entity":"mds"},{"cap":"allow rw fsname={fs} path={path}","entity":"mds"}],"sync_across_clusters":True}
         query_string = [('cluster', 'europe')]
         headers = { 
             'Accept': 'application/json',
@@ -95,6 +96,28 @@ class TestClusterUserController(BaseTestCase):
             '/cluster/user',
             method='GET',
             headers=headers,
+            query_string=query_string)
+        self.assert200(response,
+                       'Response body is : ' + response.data.decode('utf-8'))
+
+    def test_overwrite_user_caps(self):
+        """Test case for overwrite_user_caps
+
+        Overwrite capabilities for an existing CephX user (non-templated)
+        """
+        update_user_caps_request = {"user_entity":"client.demo","capabilities":[{"type":"mds","value":"allow rw fsname=CEPH-FS-01 path=/volumes/_nogroup/demo"},{"type":"mds","value":"allow rw fsname=CEPH-FS-01 path=/volumes/_nogroup/demo"}]}
+        query_string = [('cluster', 'europe')]
+        headers = { 
+            'Accept': 'application/json',
+            'Content-Type': 'application/json',
+            'Authorization': 'Bearer special-key',
+        }
+        response = self.client.open(
+            '/cluster/user',
+            method='PUT',
+            headers=headers,
+            data=json.dumps(update_user_caps_request),
+            content_type='application/json',
             query_string=query_string)
         self.assert200(response,
                        'Response body is : ' + response.data.decode('utf-8'))

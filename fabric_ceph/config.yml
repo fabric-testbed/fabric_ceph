@@ -33,7 +33,7 @@ logging:
   metrics-log-file: metrics.log
 
   ## The default log level for actor.
-  log-level: INFO
+  log-level: DEBUG
 
   ## actor rotates log files. You may specify how many archived log files to keep here.
   log-retain: 5

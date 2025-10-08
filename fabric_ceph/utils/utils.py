@@ -24,7 +24,7 @@
 #
 # Author: Komal Thareja (kthare10@renci.org)
 from http.client import BAD_REQUEST, UNAUTHORIZED, FORBIDDEN, NOT_FOUND
-from typing import Union, List, Tuple
+from typing import Union, List, Tuple, Dict
 
 import connexion
 from flask import Response, request
@@ -133,3 +133,27 @@ def ordered_cluster_names(cfg: Config) -> List[str]:
 
 def build_clients(cfg: Config, names: List[str]) -> List[Tuple[str, DashClient]]:
     return [(name, DashClient.for_cluster(name, cfg.cluster[name])) for name in names]
+
+def norm_cap_kv(it: Dict[str, str]) -> Dict[str, str]:
+    """
+    Normalize a single capability to {type, value}.
+    Accepts either {"type": "...", "value": "..."} or {"entity": "...", "cap"/"caps": "..."}.
+    """
+    t = it.get("type") or it.get("entity")
+    v = it.get("value") or it.get("cap") or it.get("caps")
+    if not t or v is None:
+        raise ValueError("Each capability must include 'type'/'entity' and 'value'/'cap'")
+    return {"entity": str(t), "cap": str(v)}
+
+def normalize_kv_caps(items: Union[List[Dict[str, str]], Dict[str, str]]) -> List[Dict[str, str]]:
+    """
+    Normalize either:
+      - list[ {type/value} or {entity/cap} ]
+      - dict { component -> rule }
+    Into list[{type, value}].
+    """
+    if isinstance(items, dict):
+        return [{"entity": str(k), "cap": str(v)} for k, v in items.items()]
+    if isinstance(items, list):
+        return [norm_cap_kv(i) for i in items]
+    raise ValueError("'capabilities' must be a list of objects or a dict of component->rule")

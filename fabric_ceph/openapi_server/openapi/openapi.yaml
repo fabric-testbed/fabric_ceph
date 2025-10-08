@@ -2,7 +2,8 @@ openapi: 3.0.3
 info:
   description: |
     Minimal OpenAPI definition for building an app around Ceph Dashboard REST endpoints used to
-    manage CephX users and authenticate via JWT. These paths mirror the documented `/api` surface.
+    manage CephX users and CephFS subvolumes, and to authenticate via JWT. These paths mirror the
+    documented `/api` surface (as commonly exposed by the Ceph Dashboard).
   title: Ceph Dashboard – Auth & Cluster User API
   version: 1.0.0
 servers:
@@ -22,10 +23,169 @@ tags:
 - name: CephFS
 - name: version
 paths:
+  /cephfs/subvolume/group/{vol_name}:
+    delete:
+      operationId: delete_subvolume_group
+      parameters:
+      - description: Target cluster/region identifier as defined by the service config.
+        explode: true
+        in: query
+        name: cluster
+        required: true
+        schema:
+          example: europe
+          type: string
+        style: form
+      - description: CephFS volume name (filesystem)
+        explode: false
+        in: path
+        name: vol_name
+        required: true
+        schema:
+          type: string
+        style: simple
+      - explode: true
+        in: query
+        name: group_name
+        required: false
+        schema:
+          type: string
+        style: form
+      - description: Force delete even if snapshots exist (behavior depends on cluster
+          policy)
+        explode: true
+        in: query
+        name: force
+        required: false
+        schema:
+          default: false
+          type: boolean
+        style: form
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/status_200_ok_no_content"
+          description: OK
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/status_400_bad_request"
+          description: Bad Request
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/status_401_unauthorized"
+          description: Unauthorized
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/status_403_forbidden"
+          description: Forbidden
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/status_404_not_found"
+          description: Not Found
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/status_500_internal_server_error"
+          description: Internal Server Error
+      security:
+      - bearerAuth: []
+      summary: Delete a subvolume group
+      tags:
+      - CephFS
+      x-openapi-router-controller: fabric_ceph.openapi_server.controllers.ceph_fs_controller
+    get:
+      description: |
+        Lists subvolume groups for a filesystem. When `info=true`, implementations
+        may return detailed objects per group; otherwise names.
+      operationId: list_subvolume_groups
+      parameters:
+      - description: Target cluster/region identifier as defined by the service config.
+        explode: true
+        in: query
+        name: cluster
+        required: true
+        schema:
+          example: europe
+          type: string
+        style: form
+      - description: CephFS volume name (filesystem)
+        explode: false
+        in: path
+        name: vol_name
+        required: true
+        schema:
+          type: string
+        style: simple
+      - description: "When true, return detailed objects per group if supported."
+        explode: true
+        in: query
+        name: info
+        required: false
+        schema:
+          default: false
+          type: boolean
+        style: form
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SubvolumeGroupList"
+          description: OK
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/status_400_bad_request"
+          description: Bad Request
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/status_401_unauthorized"
+          description: Unauthorized
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/status_403_forbidden"
+          description: Forbidden
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/status_500_internal_server_error"
+          description: Internal Server Error
+      security:
+      - bearerAuth: []
+      summary: List subvolume groups
+      tags:
+      - CephFS
+      x-openapi-router-controller: fabric_ceph.openapi_server.controllers.ceph_fs_controller
   /cephfs/subvolume/{vol_name}:
     delete:
       operationId: delete_subvolume
       parameters:
+      - description: Target cluster/region identifier as defined by the service config.
+        explode: true
+        in: query
+        name: cluster
+        required: true
+        schema:
+          example: europe
+          type: string
+        style: form
       - description: CephFS volume name (filesystem)
         explode: false
         in: path
@@ -101,11 +261,103 @@ paths:
       tags:
       - CephFS
       x-openapi-router-controller: fabric_ceph.openapi_server.controllers.ceph_fs_controller
+    get:
+      description: |
+        Lists subvolumes for a filesystem. If `group_name` is passed, results
+        are filtered to that group. When `info=true`, implementations may
+        return detailed objects instead of simple names.
+      operationId: list_subvolumes
+      parameters:
+      - description: Target cluster/region identifier as defined by the service config.
+        explode: true
+        in: query
+        name: cluster
+        required: true
+        schema:
+          example: europe
+          type: string
+        style: form
+      - description: CephFS volume name (filesystem)
+        explode: false
+        in: path
+        name: vol_name
+        required: true
+        schema:
+          type: string
+        style: simple
+      - explode: true
+        in: query
+        name: group_name
+        required: false
+        schema:
+          type: string
+        style: form
+      - description: "When true, return detailed objects per subvolume if supported."
+        explode: true
+        in: query
+        name: info
+        required: false
+        schema:
+          default: false
+          type: boolean
+        style: form
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SubvolumeList"
+          description: OK
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/status_400_bad_request"
+          description: Bad Request
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/status_401_unauthorized"
+          description: Unauthorized
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/status_403_forbidden"
+          description: Forbidden
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/status_404_not_found"
+          description: Not Found
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/status_500_internal_server_error"
+          description: Internal Server Error
+      security:
+      - bearerAuth: []
+      summary: List subvolumes
+      tags:
+      - CephFS
+      x-openapi-router-controller: fabric_ceph.openapi_server.controllers.ceph_fs_controller
     put:
       description: |
         Creates a new subvolume (if it does not exist) or resizes an existing one. Omit `size` to create without a quota (unlimited). Send `size` (bytes) to set/resize the quota.
       operationId: create_or_resize_subvolume
       parameters:
+      - description: Target cluster/region identifier as defined by the service config.
+        explode: true
+        in: query
+        name: cluster
+        required: true
+        schema:
+          example: europe
+          type: string
+        style: form
       - description: "CephFS volume name (filesystem), e.g. `CEPH-FS-01`"
         explode: false
         in: path
@@ -190,6 +442,15 @@ paths:
     get:
       operationId: subvolume_exists
       parameters:
+      - description: Target cluster/region identifier as defined by the service config.
+        explode: true
+        in: query
+        name: cluster
+        required: true
+        schema:
+          example: europe
+          type: string
+        style: form
       - explode: false
         in: path
         name: vol_name
@@ -254,6 +515,15 @@ paths:
         (equivalent to `getpath`).
       operationId: get_subvolume_info
       parameters:
+      - description: Target cluster/region identifier as defined by the service config.
+        explode: true
+        in: query
+        name: cluster
+        required: true
+        schema:
+          example: europe
+          type: string
+        style: form
       - description: CephFS volume name (filesystem)
         explode: false
         in: path
@@ -281,7 +551,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/SubvolumeInfo"
+                $ref: "#/components/schemas/status_200_ok_no_content"
           description: OK
         "400":
           content:
@@ -362,6 +632,16 @@ paths:
   /cluster/user:
     get:
       operationId: list_users
+      parameters:
+      - description: Target cluster/region identifier as defined by the service config.
+        explode: true
+        in: query
+        name: cluster
+        required: true
+        schema:
+          example: europe
+          type: string
+        style: form
       responses:
         "200":
           content:
@@ -407,41 +687,21 @@ paths:
       x-openapi-router-controller: fabric_ceph.openapi_server.controllers.cluster_user_controller
     post:
       description: |
-        Creates or updates a CephX user and synchronizes the SAME SECRET across all clusters. Capability strings may include placeholders `{fs}`, `{path}`, `{group}`, `{subvol}` which are rendered per cluster using subvolume info (getpath).
+        Creates or updates a CephX user and synchronizes the SAME SECRET across clusters. Capability strings may include placeholders `{fs}`, `{path}`, `{group}`, `{subvol}` which are rendered per cluster using subvolume info (getpath).
       operationId: apply_user_templated
       parameters:
-      - description: |
-          Optional cluster try-order/scope hint. Server still syncs to all configured clusters unless restricted by deployment policy.
-        explode: false
-        in: header
-        name: X-Cluster
-        required: false
+      - description: Target cluster/region identifier as defined by the service config.
+        explode: true
+        in: query
+        name: cluster
+        required: true
         schema:
-          example: "europe,lab"
+          example: europe
           type: string
-        style: simple
+        style: form
       requestBody:
         content:
           application/json:
-            examples:
-              projectUser:
-                value:
-                  user_entity: client.project123
-                  template_capabilities:
-                  - entity: mon
-                    cap: allow r
-                  - entity: mds
-                    cap: "allow rw fsname={fs} path={path}"
-                  - entity: osd
-                    cap: "allow rw tag cephfs data={fs}"
-                  - entity: osd
-                    cap: "allow rw tag cephfs metadata={fs}"
-                  render:
-                    fs_name: CEPH-FS-01
-                    subvol_name: project123
-                    group_name: fabric_staff
-                  sync_across_clusters: true
-                  preferred_source: europe
             schema:
               $ref: "#/components/schemas/CreateUserTemplatedRequest"
         required: true
@@ -485,71 +745,49 @@ paths:
           description: Internal Server Error
       security:
       - bearerAuth: []
-      summary: Upsert a CephX user with cluster-specific capabilities
+      summary: Upsert a CephX user with cluster-specific capabilities (templated)
       tags:
       - Cluster User
       x-openapi-router-controller: fabric_ceph.openapi_server.controllers.cluster_user_controller
-  /cluster/user/export:
-    post:
-      operationId: export_users
+    put:
+      description: |
+        Overwrites a user's capabilities with the provided list. Commonly used to adjust a single component (e.g., `mds`) while preserving others (`mon`, `osd`, `mgr`).
+      operationId: overwrite_user_caps
+      parameters:
+      - description: Target cluster/region identifier as defined by the service config.
+        explode: true
+        in: query
+        name: cluster
+        required: true
+        schema:
+          example: europe
+          type: string
+        style: form
       requestBody:
         content:
           application/json:
-            examples:
-              single:
-                value:
-                  entities:
-                  - client.demo
-              multiple:
-                value:
-                  entities:
-                  - client.alice
-                  - client.bob
             schema:
-              $ref: "#/components/schemas/ExportUsersRequest"
+              $ref: "#/components/schemas/UpdateUserCapsRequest"
         required: true
       responses:
         "200":
           content:
             application/json:
-              examples:
-                perCluster:
-                  summary: Cluster → entity → keyring text
-                  value:
-                    clusters:
-                      east:
-                        client.kthare10_0011904101: |
-                          [client.kthare10_0011904101]
-                              key = AQApM+BoJQCNABAA+id/X+Jnf...
-                              caps mds = "allow rw fsname=CEPH-FS-01 path=/volumes/_nogroup/kthare10_001..."
-                              caps mon = "allow r fsname=CEPH-FS-01"
-                              caps osd = "allow rw tag cephfs data=CEPH-FS-01"
-                        client.pruth_0031379841: |
-                          [client.pruth_0031379841]
-                              key = AQAXPuBoDvsMLRAA/wY0kk2W...
-                              caps mds = "allow rw fsname=CEPH-FS-01 path=/volumes/_nogroup/pruth_003..."
-                              caps mon = "allow r fsname=CEPH-FS-01"
-                              caps osd = "allow rw tag cephfs data=CEPH-FS-01"
-                    type: keyrings
-                    size: 2
-                    status: 200
               schema:
-                $ref: "#/components/schemas/ExportUsersResponse"
-            text/plain:
-              examples:
-                concatenated:
-                  value: |
-                    [client.kthare10_0011904101]
-                        key = AQApM+Bo...
-                        caps mds = "allow ..."
-                        ...
-                    [client.pruth_0031379841]
-                        key = AQAXPuBo...
-                        caps mds = "allow ..."
-                        ...
+                $ref: "#/components/schemas/status_200_ok_no_content"
+          description: OK (caps updated)
+        "201":
+          content:
+            application/json:
               schema:
-                type: string
-          description: OK
+                $ref: "#/components/schemas/status_200_ok_no_content"
+          description: Created (if implementation creates missing user)
+        "202":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/status_200_ok_no_content"
+          description: Accepted
         "400":
           content:
             application/json:
@@ -582,6 +820,62 @@ paths:
           description: Internal Server Error
       security:
       - bearerAuth: []
+      summary: Overwrite capabilities for an existing CephX user (non-templated)
+      tags:
+      - Cluster User
+      x-openapi-router-controller: fabric_ceph.openapi_server.controllers.cluster_user_controller
+  /cluster/user/export:
+    post:
+      operationId: export_users
+      parameters:
+      - description: Target cluster/region identifier as defined by the service config.
+        explode: true
+        in: query
+        name: cluster
+        required: true
+        schema:
+          example: europe
+          type: string
+        style: form
+      requestBody:
+        content:
+          application/json:
+            examples:
+              single:
+                value:
+                  entities:
+                  - client.demo
+              multiple:
+                value:
+                  entities:
+                  - client.alice
+                  - client.bob
+            schema:
+              $ref: "#/components/schemas/ExportUsersRequest"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ExportUsersResponse"
+            text/plain:
+              examples:
+                concatenated:
+                  value: |
+                    [client.kthare10_0011904101]
+                        key = AQApM+Bo...
+                        caps mds = "allow ..."
+                        ...
+                    [client.pruth_0031379841]
+                        key = AQAXPuBo...
+                        caps mds = "allow ..."
+                        ...
+              schema:
+                type: string
+          description: OK
+      security:
+      - bearerAuth: []
       summary: Export keyring(s) for one or more CephX users
       tags:
       - Cluster User
@@ -590,6 +884,15 @@ paths:
     delete:
       operationId: delete_user
       parameters:
+      - description: Target cluster/region identifier as defined by the service config.
+        explode: true
+        in: query
+        name: cluster
+        required: true
+        schema:
+          example: europe
+          type: string
+        style: form
       - description: "CephX entity, e.g., `client.demo`"
         explode: false
         in: path
@@ -663,6 +966,17 @@ paths:
       - version
       x-openapi-router-controller: fabric_ceph.openapi_server.controllers.version_controller
 components:
+  parameters:
+    clusterParam:
+      description: Target cluster/region identifier as defined by the service config.
+      explode: true
+      in: query
+      name: cluster
+      required: true
+      schema:
+        example: europe
+        type: string
+      style: form
   schemas:
     version:
       allOf:
@@ -772,16 +1086,16 @@ components:
     status_400_bad_request:
       example:
         errors:
-        - size: 1
+        - size: 2
           details: details
           message: Bad Request
           type: error
-          status: 5
-        - size: 1
+          status: 7
+        - size: 2
           details: details
           message: Bad Request
           type: error
-          status: 5
+          status: 7
       properties:
         errors:
           items:
@@ -792,14 +1106,14 @@ components:
       type: object
     status_401_unauthorized:
       example:
-        size: 5
+        size: 9
         type: error
         errors:
         - details: details
           message: Unauthorized
         - details: details
           message: Unauthorized
-        status: 2
+        status: 3
       properties:
         errors:
           items:
@@ -822,14 +1136,14 @@ components:
       type: object
     status_403_forbidden:
       example:
-        size: 7
+        size: 2
         type: error
         errors:
         - details: details
           message: Forbidden
         - details: details
           message: Forbidden
-        status: 9
+        status: 4
       properties:
         errors:
           items:
@@ -852,14 +1166,14 @@ components:
       type: object
     status_404_not_found:
       example:
-        size: 3
+        size: 1
         type: error
         errors:
         - details: details
           message: Not Found
         - details: details
           message: Not Found
-        status: 2
+        status: 5
       properties:
         errors:
           items:
@@ -882,14 +1196,14 @@ components:
       type: object
     status_500_internal_server_error:
       example:
-        size: 4
+        size: 7
         type: error
         errors:
         - details: details
           message: Internal Server Error
         - details: details
           message: Internal Server Error
-        status: 7
+        status: 1
       properties:
         errors:
           items:
@@ -919,16 +1233,16 @@ components:
           default: No Content
           type: string
         details:
-          type: string
+          type: object
       title: status_200_ok_no_content_data
       type: object
     status_400_bad_request_errors:
       example:
-        size: 1
+        size: 2
         details: details
         message: Bad Request
         type: error
-        status: 5
+        status: 7
       properties:
         message:
           default: Bad Request
@@ -1028,6 +1342,27 @@ components:
       - entity
       title: Capability
       type: object
+    CapabilityKV:
+      example:
+        type: mds
+        value: allow rw fsname=CEPH-FS-01 path=/volumes/_nogroup/demo
+      properties:
+        type:
+          description: One of mon|osd|mds|mgr
+          example: mds
+          title: type
+          type: string
+        value:
+          description: "Capability string, e.g. `allow rw`, `allow r fsname=CEPH-FS-01\
+            \ path=/volumes/_nogroup/demo`"
+          example: allow rw fsname=CEPH-FS-01 path=/volumes/_nogroup/demo
+          title: value
+          type: string
+      required:
+      - type
+      - value
+      title: CapabilityKV
+      type: object
     CapabilityTemplate:
       example:
         cap: "allow rw fsname={fs} path={path}"
@@ -1074,16 +1409,20 @@ components:
     CreateUserTemplatedRequest:
       example:
         user_entity: client.project123
+        renders:
+        - subvol_name: project123
+          group_name: fabric_staff
+          fs_name: CEPH-FS-01
+        - subvol_name: project123
+          group_name: fabric_staff
+          fs_name: CEPH-FS-01
+        mergeStrategy: multi
         preferred_source: europe
         template_capabilities:
         - cap: "allow rw fsname={fs} path={path}"
           entity: mds
         - cap: "allow rw fsname={fs} path={path}"
           entity: mds
-        render:
-          subvol_name: project123
-          group_name: fabric_staff
-          fs_name: CEPH-FS-01
         sync_across_clusters: true
       properties:
         user_entity:
@@ -1095,25 +1434,60 @@ components:
             $ref: "#/components/schemas/CapabilityTemplate"
           title: template_capabilities
           type: array
-        render:
-          $ref: "#/components/schemas/CapRenderContext"
+        renders:
+          description: |
+            Multiple subvolumes (possibly in different groups). Server will expand the MDS template for each context and merge them into one 'mds' cap string using commas.
+          items:
+            $ref: "#/components/schemas/CapRenderContext"
+          minItems: 1
+          title: renders
+          type: array
+        mergeStrategy:
+          default: multi
+          enum:
+          - multi
+          - replace
+          title: mergeStrategy
+          type: string
         sync_across_clusters:
           default: true
-          description: |
-            If true, export key from a source cluster and import to others so the same secret is used everywhere; then overwrite caps on each cluster with its rendered (path-aware) caps.
           title: sync_across_clusters
           type: boolean
         preferred_source:
           description: Preferred source cluster when user doesn't already exist.
           example: europe
-          nullable: true
           title: preferred_source
           type: string
       required:
-      - render
+      - renders
       - template_capabilities
       - user_entity
       title: CreateUserTemplatedRequest
+      type: object
+    UpdateUserCapsRequest:
+      example:
+        user_entity: client.demo
+        capabilities:
+        - type: mds
+          value: allow rw fsname=CEPH-FS-01 path=/volumes/_nogroup/demo
+        - type: mds
+          value: allow rw fsname=CEPH-FS-01 path=/volumes/_nogroup/demo
+      properties:
+        user_entity:
+          example: client.demo
+          title: user_entity
+          type: string
+        capabilities:
+          description: |
+            Complete set of caps to apply (overwrites existing). Provide one entry per component.
+          items:
+            $ref: "#/components/schemas/CapabilityKV"
+          title: capabilities
+          type: array
+      required:
+      - capabilities
+      - user_entity
+      title: UpdateUserCapsRequest
       type: object
     ApplyUserResponse:
       example:
@@ -1175,121 +1549,22 @@ components:
             items:
               $ref: "#/components/schemas/Capability"
             type: array
-          description: Map cluster -> rendered caps actually applied
+          description: Map cluster → rendered caps actually applied
           title: caps_applied
           type: object
         paths:
           additionalProperties:
             type: string
-          description: Map cluster -> resolved subvolume path
+          description: Map cluster → resolved subvolume path
           title: paths
           type: object
         errors:
           additionalProperties:
             type: string
-          description: Map cluster -> error string (if any)
+          description: Map cluster → error string (if any)
           title: errors
           type: object
       title: ApplyUserResponse
-      type: object
-    ClusterInfoList:
-      allOf:
-      - $ref: "#/components/schemas/status_200_ok_paginated"
-      - properties:
-          type:
-            example: cluster_info
-            type: string
-          data:
-            items:
-              $ref: "#/components/schemas/ClusterInfoItem"
-            type: array
-        type: object
-      example:
-        total: 5
-        offset: 6
-        size: 1
-        data:
-        - cluster: europe
-          mons:
-          - name: mon.a
-            v1: 10.138.254.2:6789/0
-            v2: 10.138.254.2:3300/0
-          - name: mon.a
-            v1: 10.138.254.2:6789/0
-            v2: 10.138.254.2:3300/0
-          fsid: 13371194-879b-11f0-b06f-fa163e08d592
-          ceph_conf_minimal: |
-            [global]
-              fsid = 13371194-879b-11f0-b06f-fa163e08d592
-              mon_host = [v2:10.138.254.2:3300/0,v1:10.138.254.2:6789/0] [v2:10.135.254.2:3300/0,v1:10.135.254.2:6789/0]
-          error: error
-          mon_host: "[v2:10.138.254.2:3300/0,v1:10.138.254.2:6789/0] [v2:10.135.254.2:3300/0,v1:10.135.254.2:6789/0]"
-        - cluster: europe
-          mons:
-          - name: mon.a
-            v1: 10.138.254.2:6789/0
-            v2: 10.138.254.2:3300/0
-          - name: mon.a
-            v1: 10.138.254.2:6789/0
-            v2: 10.138.254.2:3300/0
-          fsid: 13371194-879b-11f0-b06f-fa163e08d592
-          ceph_conf_minimal: |
-            [global]
-              fsid = 13371194-879b-11f0-b06f-fa163e08d592
-              mon_host = [v2:10.138.254.2:3300/0,v1:10.138.254.2:6789/0] [v2:10.135.254.2:3300/0,v1:10.135.254.2:6789/0]
-          error: error
-          mon_host: "[v2:10.138.254.2:3300/0,v1:10.138.254.2:6789/0] [v2:10.135.254.2:3300/0,v1:10.135.254.2:6789/0]"
-        limit: 0
-        type: cluster_info
-        status: 5
-      title: ClusterInfoList
-    ClusterInfoItem:
-      example:
-        cluster: europe
-        mons:
-        - name: mon.a
-          v1: 10.138.254.2:6789/0
-          v2: 10.138.254.2:3300/0
-        - name: mon.a
-          v1: 10.138.254.2:6789/0
-          v2: 10.138.254.2:3300/0
-        fsid: 13371194-879b-11f0-b06f-fa163e08d592
-        ceph_conf_minimal: |
-          [global]
-            fsid = 13371194-879b-11f0-b06f-fa163e08d592
-            mon_host = [v2:10.138.254.2:3300/0,v1:10.138.254.2:6789/0] [v2:10.135.254.2:3300/0,v1:10.135.254.2:6789/0]
-        error: error
-        mon_host: "[v2:10.138.254.2:3300/0,v1:10.138.254.2:6789/0] [v2:10.135.254.2:3300/0,v1:10.135.254.2:6789/0]"
-      properties:
-        cluster:
-          example: europe
-          title: cluster
-          type: string
-        fsid:
-          example: 13371194-879b-11f0-b06f-fa163e08d592
-          title: fsid
-          type: string
-        mons:
-          items:
-            $ref: "#/components/schemas/ClusterInfoItem_mons_inner"
-          title: mons
-          type: array
-        mon_host:
-          example: "[v2:10.138.254.2:3300/0,v1:10.138.254.2:6789/0] [v2:10.135.254.2:3300/0,v1:10.135.254.2:6789/0]"
-          title: mon_host
-          type: string
-        ceph_conf_minimal:
-          example: |
-            [global]
-              fsid = 13371194-879b-11f0-b06f-fa163e08d592
-              mon_host = [v2:10.138.254.2:3300/0,v1:10.138.254.2:6789/0] [v2:10.135.254.2:3300/0,v1:10.135.254.2:6789/0]
-          title: ceph_conf_minimal
-          type: string
-        error:
-          nullable: true
-          title: error
-          type: string
-      title: ClusterInfoItem
       type: object
     users:
       allOf:
@@ -1448,32 +1723,6 @@ components:
       - subvol_name
       title: SubvolumeCreateOrResizeRequest
       type: object
-    SubvolumeInfo:
-      additionalProperties: true
-      example:
-        bytes_quota: 0
-        mode: "0777"
-        path: path
-        created_at: 2000-01-23T04:56:07.000+00:00
-        state: complete
-      properties:
-        path:
-          description: Absolute CephFS path to the subvolume (use for mounting)
-          type: string
-        bytes_quota:
-          format: int64
-          type: integer
-        mode:
-          example: "0777"
-          type: string
-        state:
-          example: complete
-          type: string
-        created_at:
-          format: date-time
-          type: string
-      title: SubvolumeInfo
-      type: object
     SubvolumeExists:
       example:
         exists: true
@@ -1482,6 +1731,219 @@ components:
           type: boolean
       title: SubvolumeExists
       type: object
+    SubvolumeSummary:
+      description: Minimal subvolume info when `info=true` is supported.
+      properties:
+        name:
+          example: alice
+          title: name
+          type: string
+        group_name:
+          example: fabric_staff
+          nullable: true
+          title: group_name
+          type: string
+        path:
+          example: /volumes/_nogroup/alice/uuid
+          nullable: true
+          title: path
+          type: string
+        bytes_quota:
+          example: 10737418240
+          format: int64
+          nullable: true
+          title: bytes_quota
+          type: integer
+        bytes_used:
+          example: 1048576
+          format: int64
+          nullable: true
+          title: bytes_used
+          type: integer
+        state:
+          example: complete
+          nullable: true
+          title: state
+          type: string
+      title: SubvolumeSummary
+      type: object
+    SubvolumeList:
+      allOf:
+      - $ref: "#/components/schemas/status_200_ok_paginated"
+      - properties:
+          type:
+            example: subvolumes
+            type: string
+          data:
+            description: |
+              When `info=false` (default), items are names (strings).
+              When `info=true`, items may be detailed objects.
+            items:
+              $ref: "#/components/schemas/SubvolumeList_allOf_data"
+            type: array
+        type: object
+      example:
+        total: 5
+        offset: 6
+        size: 1
+        data:
+        - SubvolumeList_allOf_data
+        - SubvolumeList_allOf_data
+        limit: 0
+        type: subvolumes
+        status: 5
+      title: SubvolumeList
+      type: object
+    SubvolumeGroupSummary:
+      description: Minimal subvolume group info when `info=true` is supported.
+      properties:
+        group_name:
+          example: fabric_staff
+          title: group_name
+          type: string
+        path:
+          example: /volumes/fabric_staff
+          nullable: true
+          title: path
+          type: string
+      title: SubvolumeGroupSummary
+      type: object
+    SubvolumeGroupList:
+      allOf:
+      - $ref: "#/components/schemas/status_200_ok_paginated"
+      - properties:
+          type:
+            example: subvolume_groups
+            type: string
+          data:
+            description: |
+              When `info=false`, items are names (strings).
+              When `info=true`, items may be detailed objects.
+            items:
+              $ref: "#/components/schemas/SubvolumeGroupList_allOf_data"
+            type: array
+        type: object
+      example:
+        total: 5
+        offset: 6
+        size: 1
+        data:
+        - SubvolumeGroupList_allOf_data
+        - SubvolumeGroupList_allOf_data
+        limit: 0
+        type: subvolume_groups
+        status: 5
+      title: SubvolumeGroupList
+      type: object
+    ClusterInfoList:
+      allOf:
+      - $ref: "#/components/schemas/status_200_ok_paginated"
+      - properties:
+          type:
+            example: cluster_info
+            type: string
+          data:
+            items:
+              $ref: "#/components/schemas/ClusterInfoItem"
+            type: array
+        type: object
+      example:
+        total: 5
+        offset: 6
+        size: 1
+        data:
+        - cluster: europe
+          mons:
+          - name: mon.a
+            v1: 10.138.254.2:6789/0
+            v2: 10.138.254.2:3300/0
+          - name: mon.a
+            v1: 10.138.254.2:6789/0
+            v2: 10.138.254.2:3300/0
+          fsid: 13371194-879b-11f0-b06f-fa163e08d592
+          ceph_conf_minimal: |
+            [global]
+              fsid = 13371194-879b-11f0-b06f-fa163e08d592
+              mon_host = [v2:10.138.254.2:3300/0,v1:10.138.254.2:6789/0] [v2:10.135.254.2:3300/0,v1:10.135.254.2:6789/0]
+          error: error
+          mon_host: "[v2:10.138.254.2:3300/0,v1:10.138.254.2:6789/0] [v2:10.135.254.2:3300/0,v1:10.135.254.2:6789/0]"
+        - cluster: europe
+          mons:
+          - name: mon.a
+            v1: 10.138.254.2:6789/0
+            v2: 10.138.254.2:3300/0
+          - name: mon.a
+            v1: 10.138.254.2:6789/0
+            v2: 10.138.254.2:3300/0
+          fsid: 13371194-879b-11f0-b06f-fa163e08d592
+          ceph_conf_minimal: |
+            [global]
+              fsid = 13371194-879b-11f0-b06f-fa163e08d592
+              mon_host = [v2:10.138.254.2:3300/0,v1:10.138.254.2:6789/0] [v2:10.135.254.2:3300/0,v1:10.135.254.2:6789/0]
+          error: error
+          mon_host: "[v2:10.138.254.2:3300/0,v1:10.138.254.2:6789/0] [v2:10.135.254.2:3300/0,v1:10.135.254.2:6789/0]"
+        limit: 0
+        type: cluster_info
+        status: 5
+      title: ClusterInfoList
+    ClusterInfoItem:
+      example:
+        cluster: europe
+        mons:
+        - name: mon.a
+          v1: 10.138.254.2:6789/0
+          v2: 10.138.254.2:3300/0
+        - name: mon.a
+          v1: 10.138.254.2:6789/0
+          v2: 10.138.254.2:3300/0
+        fsid: 13371194-879b-11f0-b06f-fa163e08d592
+        ceph_conf_minimal: |
+          [global]
+            fsid = 13371194-879b-11f0-b06f-fa163e08d592
+            mon_host = [v2:10.138.254.2:3300/0,v1:10.138.254.2:6789/0] [v2:10.135.254.2:3300/0,v1:10.135.254.2:6789/0]
+        error: error
+        mon_host: "[v2:10.138.254.2:3300/0,v1:10.138.254.2:6789/0] [v2:10.135.254.2:3300/0,v1:10.135.254.2:6789/0]"
+      properties:
+        cluster:
+          example: europe
+          title: cluster
+          type: string
+        fsid:
+          example: 13371194-879b-11f0-b06f-fa163e08d592
+          title: fsid
+          type: string
+        mons:
+          items:
+            $ref: "#/components/schemas/ClusterInfoItem_mons_inner"
+          title: mons
+          type: array
+        mon_host:
+          example: "[v2:10.138.254.2:3300/0,v1:10.138.254.2:6789/0] [v2:10.135.254.2:3300/0,v1:10.135.254.2:6789/0]"
+          title: mon_host
+          type: string
+        ceph_conf_minimal:
+          example: |
+            [global]
+              fsid = 13371194-879b-11f0-b06f-fa163e08d592
+              mon_host = [v2:10.138.254.2:3300/0,v1:10.138.254.2:6789/0] [v2:10.135.254.2:3300/0,v1:10.135.254.2:6789/0]
+          title: ceph_conf_minimal
+          type: string
+        error:
+          nullable: true
+          title: error
+          type: string
+      title: ClusterInfoItem
+      type: object
+    SubvolumeList_allOf_data:
+      oneOf:
+      - type: string
+      - $ref: "#/components/schemas/SubvolumeSummary"
+      title: SubvolumeList_allOf_data
+    SubvolumeGroupList_allOf_data:
+      oneOf:
+      - type: string
+      - $ref: "#/components/schemas/SubvolumeGroupSummary"
+      title: SubvolumeGroupList_allOf_data
     ClusterInfoItem_mons_inner:
       example:
         name: mon.a

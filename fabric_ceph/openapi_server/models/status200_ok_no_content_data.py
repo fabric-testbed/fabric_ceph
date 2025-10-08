@@ -18,11 +18,11 @@ class Status200OkNoContentData(Model):
         :param message: The message of this Status200OkNoContentData.  # noqa: E501
         :type message: str
         :param details: The details of this Status200OkNoContentData.  # noqa: E501
-        :type details: str
+        :type details: object
         """
         self.openapi_types = {
             'message': str,
-            'details': str
+            'details': object
         }
 
         self.attribute_map = {
@@ -66,22 +66,22 @@ class Status200OkNoContentData(Model):
         self._message = message
 
     @property
-    def details(self) -> str:
+    def details(self) -> object:
         """Gets the details of this Status200OkNoContentData.
 
 
         :return: The details of this Status200OkNoContentData.
-        :rtype: str
+        :rtype: object
         """
         return self._details
 
     @details.setter
-    def details(self, details: str):
+    def details(self, details: object):
         """Sets the details of this Status200OkNoContentData.
 
 
         :param details: The details of this Status200OkNoContentData.
-        :type details: str
+        :type details: object
         """
 
         self._details = details

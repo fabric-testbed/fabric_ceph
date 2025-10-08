@@ -1,6 +1,5 @@
 from fabric_ceph.response import cluster_info_controller as rc
 
-
 def list_cluster_info():  # noqa: E501
     """Get FSID and monitor endpoints for all clusters
 

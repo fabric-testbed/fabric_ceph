@@ -1,5 +1,5 @@
 pytz
-fabric_ceph_client==1.0.0b11
+fabric_ceph_client==1.0.1
 fabric_reports_client
 pandas
 matplotlib

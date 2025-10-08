@@ -129,6 +129,33 @@ class CephManagerClient:
         ct = (resp.headers.get("Content-Type") or "").split(";")[0].strip().lower()
         return ct.endswith("/json") or ct.endswith("+json")
 
+    # --- add near other static helpers ---
+    @staticmethod
+    def _norm_cap_kv(it: Dict[str, str]) -> Dict[str, str]:
+        """
+        Normalize a single capability to {type, value}.
+        Accepts either {"type": "...", "value": "..."} or {"entity": "...", "cap"/"caps": "..."}.
+        """
+        t = it.get("type") or it.get("entity")
+        v = it.get("value") or it.get("cap") or it.get("caps")
+        if not t or v is None:
+            raise ValueError("Each capability must include 'type'/'entity' and 'value'/'cap'")
+        return {"type": str(t), "value": str(v)}
+
+    @staticmethod
+    def _normalize_kv_caps(items: Union[List[Dict[str, str]], Dict[str, str]]) -> List[Dict[str, str]]:
+        """
+        Normalize either:
+          - list[ {type/value} or {entity/cap} ]
+          - dict { component -> rule }
+        Into list[{type, value}].
+        """
+        if isinstance(items, dict):
+            return [{"type": str(k), "value": str(v)} for k, v in items.items()]
+        if isinstance(items, list):
+            return [CephManagerClient._norm_cap_kv(i) for i in items]
+        raise ValueError("'capabilities' must be a list of objects or a dict of component->rule")
+
     def _request(
         self,
         method: str,
@@ -456,5 +483,77 @@ class CephManagerClient:
         return self._request(
             "DELETE",
             f"/cephfs/subvolume/{vol_name}",
+            params=self._params_with_cluster(cluster, q),
+        )
+
+    # --------------------- New: /cluster/user (PUT overwrite) ---------------------
+
+    def overwrite_user_caps(
+        self,
+        cluster: str,
+        *,
+        user_entity: str,
+        capabilities: Union[List[Dict[str, str]], Dict[str, str]],
+    ) -> Dict[str, Any]:
+        """
+        PUT /cluster/user?cluster=<name>
+        Overwrite capabilities for an existing CephX user.
+
+        `capabilities` can be:
+          - list of {"type": "...", "value": "..."} (preferred), or
+          - list of {"entity": "...", "cap": "..."} (accepted), or
+          - dict {"mds": "allow ...", "mon": "allow r", ...}
+        """
+        caps_norm = self._normalize_kv_caps(capabilities)
+        payload = {"user_entity": user_entity, "capabilities": caps_norm}
+        return self._request(
+            "PUT",
+            "/cluster/user",
+            params=self._params_with_cluster(cluster),
+            json=payload,
+        )
+
+    # --------------------- New: CephFS listing ---------------------
+
+    def list_subvolumes(
+        self,
+        cluster: str,
+        vol_name: str,
+        *,
+        group_name: Optional[str] = None,
+        info: bool = False,
+    ) -> Dict[str, Any]:
+        """
+        GET /cephfs/subvolume/{vol_name}?cluster=<name>[&group_name=...][&info=true]
+        Returns the SubvolumeList envelope (with `data` holding names or objects).
+        """
+        q: Dict[str, Any] = {}
+        if group_name:
+            q["group_name"] = group_name
+        if info:
+            q["info"] = "true"
+        return self._request(
+            "GET",
+            f"/cephfs/subvolume/{vol_name}",
+            params=self._params_with_cluster(cluster, q),
+        )
+
+    def list_subvolume_groups(
+        self,
+        cluster: str,
+        vol_name: str,
+        *,
+        info: bool = False,
+    ) -> Dict[str, Any]:
+        """
+        GET /cephfs/subvolume/group/{vol_name}?cluster=<name>[&info=true]
+        Returns the SubvolumeGroupList envelope (with `data` holding names or objects).
+        """
+        q: Dict[str, Any] = {}
+        if info:
+            q["info"] = "true"
+        return self._request(
+            "GET",
+            f"/cephfs/subvolume/group/{vol_name}",
             params=self._params_with_cluster(cluster, q),
         )

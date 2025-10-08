@@ -391,7 +391,10 @@ class DashClient:
         for comp, val in (("mds", mds), ("mon", mon), ("osd", osd), ("mgr", mgr)):
             if val is not None:
                 # include explicit empty "" if caller wants to clear
-                new_caps_map[comp] = val
+                if val == "":
+                    new_caps_map.pop(comp, None)
+                else:
+                    new_caps_map[comp] = val
             elif replace:
                 new_caps_map.pop(comp, None)
 

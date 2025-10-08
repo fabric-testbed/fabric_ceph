@@ -3,7 +3,7 @@
 FABRIC CephFS Manager — 2-Tab GUI
 ---------------------------------
 Tabs:
-  1) Subvolumes & Groups: create/resize, browse (by group or all), apply caps
+  1) Subvolumes & Groups: create/resize, browse (by group or all), apply/revoke caps
      (single user or project), delete subvols, delete/empty groups
   2) Users: list/search CephX users, export keyrings, delete users
 
@@ -19,8 +19,8 @@ Notes
 
 NEW
 ---
-- Apply supports selection from either Group/Subvol **or** All Subvols.
-- If selected via All Subvols and the subvolume is ungrouped, we pass group=None.
+- Revoke caps: removes the MDS path clause for the selected volume from a user or all users in a project.
+- Works for grouped and ungrouped subvolumes (group=None).
 """
 
 from __future__ import annotations
@@ -110,6 +110,61 @@ def _user_label(u: Dict[str, Any]) -> str:
 def _project_label(p: Dict[str, Any]) -> str:
     return f"{p.get('project_name') or p.get('project_id')} [{p.get('project_id')}]"
 
+# --- Keyring / caps parsing helpers (for revoke) ---
+def _extract_caps_by_entity_from_keyring_text(keyring_text: str) -> Dict[str, str]:
+    """
+    Parse blocks like:
+      caps mds = "allow rw fsname=FS path=/path, allow r fsname=FS path=/other"
+      caps mon = "allow r fsname=FS"
+      caps osd = "allow rw tag cephfs data=FS, allow rw tag cephfs metadata=FS"
+    Return dict: {"mds": "...", "mon": "...", "osd": "...", "mgr": "...?"}
+    """
+    import re
+    caps: Dict[str, str] = {}
+    for ent in ("mds", "mon", "osd", "mgr"):
+        m = re.search(rf'caps\s+{ent}\s*=\s*"([^"]*)"', keyring_text)
+        if m:
+            caps[ent] = m.group(1)
+    return caps
+
+def _remove_exact_path_clause_from_mds_caps(mds_caps: str, fs_name: str, target_path: str) -> Tuple[str, bool]:
+    """
+    Remove the clause that matches both fsname and path.
+    Returns (new_mds_caps, changed_bool).
+    """
+    if not (mds_caps and fs_name and target_path):
+        return mds_caps or "", False
+    # Split by commas (top-level clauses are comma-separated)
+    parts = [p.strip() for p in mds_caps.split(",") if p.strip()]
+    keep: List[str] = []
+    changed = False
+    for clause in parts:
+        lc = clause.lower().replace("  ", " ")
+        if ("fsname=" in lc) and ("path=" in lc) and (f"fsname={fs_name.lower()}" in lc) and (f"path={target_path.lower()}" in lc):
+            changed = True
+            continue
+        keep.append(clause)
+    return (", ".join(keep), changed)
+
+def _deep_find_path(obj: Any) -> Optional[str]:
+    """
+    Robustly search for first 'path' key in nested dict/list.
+    Works with responses where get_subvolume_info returns a nested status wrapper.
+    """
+    if isinstance(obj, dict):
+        for k, v in obj.items():
+            if k == "path" and isinstance(v, str):
+                return v
+            found = _deep_find_path(v)
+            if found:
+                return found
+    elif isinstance(obj, list):
+        for item in obj:
+            found = _deep_find_path(item)
+            if found:
+                return found
+    return None
+
 # -------- GUI --------
 def launch():
     import ipywidgets as W
@@ -155,13 +210,14 @@ def launch():
     info_all_btn = W.Button(description="Info (All→Selected)")
     delete_all_btn = W.Button(description="Delete (All→Selected)", button_style="danger")
 
-    # Apply caps to users or project (by picking a subvol/group OR All Subvols)
-    apply_header = W.HTML("<b>Apply Permissions to Users</b><br><small>Pick a volume via <i>Group/Subvol</i> or <i>All Subvols</i> below, then choose targets.</small>")
+    # Apply / Revoke caps to users or project (by picking a subvol/group OR All Subvols)
+    apply_header = W.HTML("<b>Permissions</b><br><small>Pick a volume via <i>Group/Subvol</i> or <i>All Subvols</i> below, then choose targets.</small>")
     apply_selection_lbl = W.HTML("<i>No volume selected yet — pick from Group/Subvol or All Subvols.</i>")
     apply_target = W.ToggleButtons(options=[("Single User", "user"), ("Entire Project", "project")], description="Target")
     apply_user_dd = W.Dropdown(description="User", options=[], disabled=False)
     apply_project_dd = W.Dropdown(description="Project", options=[], disabled=True)
     apply_btn = W.Button(description="Apply Caps to Selected Volume", button_style="warning")
+    revoke_btn = W.Button(description="Revoke Caps from Selected Volume", button_style="", tooltip="Removes the MDS path clause for the selected volume")
 
     # ---------- USERS TAB ----------
     users_filter = W.Text(description="Search", placeholder="entity contains...")
@@ -315,7 +371,7 @@ def launch():
             all_subvols_sel.options = []; all_subvols_sel.disabled = True
             _log(f"Refresh all subvols failed: {e}")
 
-    # Find the group containing a subvol (for All Subvols actions or apply)
+    # Find the group containing a subvol (for All Subvols actions or apply/revoke)
     def _find_group_for_subvol(subvol: str) -> Optional[str]:
         try:
             cl = (cluster_dd.value or "").strip()
@@ -558,7 +614,7 @@ def launch():
         except Exception as e:
             status.value = f"<span style='color:red'>Delete (all) failed: {e}</span>"
 
-    # ---------- Apply caps ----------
+    # ---------- Apply / Revoke caps ----------
     def _update_apply_selection_badge():
         try:
             fs = (vol_name.value or "").strip()
@@ -636,6 +692,77 @@ def launch():
         with results:
             print(f"Apply complete. Success: {ok}, Failed: {err}")
 
+    def _overwrite_caps_for_entity(cl: str, user_entity: str, cap_map: Dict[str, str]):
+        """
+        PUT /cluster/user with {"user_entity":..., "capabilities":[{"entity":"mds","cap":"..."}, ...]}
+        If CephManagerClient has overwrite_user_caps(), use it; otherwise fall back to raw _request.
+        Skips empty components (especially 'mds').
+        """
+        items = [{"entity": k, "cap": v} for k, v in cap_map.items() if isinstance(v, str) and v.strip()]
+        payload = {"user_entity": user_entity, "capabilities": items}
+        if hasattr(ceph, "overwrite_user_caps"):
+            return ceph.overwrite_user_caps(cluster=cl, user_entity=user_entity, capabilities=items)
+        # Fallback to internal request
+        return ceph._request("PUT", "/cluster/user", params={"cluster": cl}, json=payload)
+
+    def _revoke_caps_for_users(logins: List[str], fs: str, svn: str, maybe_group: Optional[str], cl: str):
+        """
+        Resolves the subvol absolute path, removes the exact (fs,path) MDS clause from users' caps,
+        and writes the reduced caps back (without sending an empty 'mds').
+        """
+        # Resolve absolute path from get_subvolume_info
+        try:
+            info = ceph.get_subvolume_info(cluster=cl, vol_name=fs, subvol_name=svn, group_name=maybe_group)
+            target_path = _deep_find_path(info)
+            if not target_path:
+                raise ValueError("Could not resolve subvolume path from API response.")
+        except Exception as e:
+            raise RuntimeError(f"Failed to resolve path for {fs}/{maybe_group or '∅'}:{svn}: {e}")
+
+        ok = err = 0
+        with results:
+            print(f"Revoking MDS clause for path '{target_path}' from {len(logins)} user(s)...")
+        for login in logins:
+            user_entity = f"client.{login}"
+            try:
+                # Export current keyring → parse caps
+                exp = ceph.export_users(cluster=cl, entities=[user_entity])
+                blob = ((exp or {}).get("clusters", {}).get(cl, {}) or {}).get(user_entity, "")
+                text = (blob if isinstance(blob, str) else str(blob)).replace("\\n", "\n")
+                caps_now = _extract_caps_by_entity_from_keyring_text(text)
+                mds_now = caps_now.get("mds", "") or ""
+
+                new_mds, changed = _remove_exact_path_clause_from_mds_caps(mds_now, fs_name=fs, target_path=target_path)
+                if not changed:
+                    _log(f"No matching MDS clause for {user_entity}; skipping.")
+                    with results: print(f"SKIP {user_entity}: no matching clause")
+                    continue
+
+                # Build final caps map (drop mds if empty)
+                final_caps: Dict[str, str] = {}
+                if new_mds.strip():
+                    final_caps["mds"] = new_mds
+                if (caps_now.get("mon") or "").strip():
+                    final_caps["mon"] = caps_now["mon"]
+                if (caps_now.get("osd") or "").strip():
+                    final_caps["osd"] = caps_now["osd"]
+                if (caps_now.get("mgr") or "").strip():
+                    final_caps["mgr"] = caps_now["mgr"]
+
+                _overwrite_caps_for_entity(cl, user_entity, final_caps)
+                ok += 1
+                _log(f"Revoked for {user_entity}")
+                with results:
+                    print(f"OK {user_entity}: revoked path {target_path}")
+            except Exception as e:
+                err += 1
+                _log(f"FAIL revoke {user_entity}: {e}")
+                with results:
+                    print(f"FAIL {user_entity}: {e}")
+
+        with results:
+            print(f"Revoke complete. Success: {ok}, Failed: {err}")
+
     def _on_apply_caps(_):
         if ceph is None:
             status.value = "<span style='color:red'>Connect first.</span>"; return
@@ -672,6 +799,43 @@ def launch():
         except Exception as e:
             status.value = f"<span style='color:red'>Apply failed: {e}</span>"
             _log(f"Apply error: {e}")
+
+    def _on_revoke_caps(_):
+        if ceph is None:
+            status.value = "<span style='color:red'>Connect first.</span>"; return
+        try:
+            cl = (cluster_dd.value or "").strip()
+            if not cl:
+                raise ValueError("No cluster selected.")
+            fs, grp, svn = _current_apply_selection()
+
+            if apply_target.value == "user":
+                if apply_user_dd.value is None or apply_user_dd.value >= len(users_cache):
+                    raise ValueError("Pick a user.")
+                login = users_cache[apply_user_dd.value].get("bastion_login")
+                if not login:
+                    raise ValueError("Selected user has no bastion_login.")
+                _revoke_caps_for_users([login], fs, svn, grp, cl)
+
+            else:  # project
+                if apply_project_dd.value is None or apply_project_dd.value >= len(projects_cache):
+                    raise ValueError("Pick a project.")
+                proj = projects_cache[apply_project_dd.value]
+                proj_id = proj.get("project_id")
+                try:
+                    resp = reports.query_users(user_active=True, fetch_all=True, project_id=[proj_id])
+                    data = (resp or {}).get("data", [])
+                except Exception as e:
+                    data = []
+                    _log(f"Reports members fetch failed: {e}")
+                logins = [r.get("bastion_login") for r in data or [] if r.get("bastion_login")]
+                if not logins:
+                    raise ValueError("No members with bastion_login found for project.")
+                _revoke_caps_for_users(logins, fs, svn, grp, cl)
+
+        except Exception as e:
+            status.value = f"<span style='color:red'>Revoke failed: {e}</span>"
+            _log(f"Revoke error: {e}")
 
     # ---------- Users tab: list/export/delete ----------
     def _users_from_resp(resp: Any) -> List[Dict[str, Any]]:
@@ -768,7 +932,7 @@ def launch():
     delete_all_btn.on_click(_on_delete_all)
     all_subvols_sel.observe(lambda ch: _update_apply_selection_badge(), names="value")  # keep badge in sync
 
-    # Apply caps
+    # Apply/Revoke caps
     def _toggle_apply_target(_=None):
         if apply_target.value == "user":
             apply_user_dd.disabled = False; apply_project_dd.disabled = True
@@ -776,6 +940,7 @@ def launch():
             apply_user_dd.disabled = True; apply_project_dd.disabled = False
     apply_target.observe(_toggle_apply_target, names="value")
     apply_btn.on_click(_on_apply_caps)
+    revoke_btn.on_click(_on_revoke_caps)
     _toggle_apply_target()  # initialize
 
     # Users tab
@@ -813,7 +978,7 @@ def launch():
         apply_header,
         apply_selection_lbl,
         W.HBox([apply_target, apply_user_dd, apply_project_dd]),
-        W.HBox([apply_btn]),
+        W.HBox([apply_btn, revoke_btn]),
     ])
 
     tab_subvols = W.VBox([create_box, W.HTML("<hr>"), browse_box, W.HTML("<hr>"), apply_box])

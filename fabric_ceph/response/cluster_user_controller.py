@@ -275,6 +275,7 @@ def overwrite_user_caps(cluster, body):  # noqa: E501
     try:
         fabric_token, is_operator, _ = authorize()
         if not is_operator:
+            log.error(f"{fabric_token.uuid}/{fabric_token.email} is not authorized!")
             return cors_401(details=f"{fabric_token.uuid}/{fabric_token.email} is not authorized!")
 
         # Parse/normalize body
@@ -282,12 +283,14 @@ def overwrite_user_caps(cluster, body):  # noqa: E501
             body = connexion.request.get_json()
 
         if not isinstance(body, dict):
+            log.error(f"Failed processing CephX overwrite caps request: {body}")
             return cors_400(details="Request body must be JSON object")
 
         user_entity = body.get("user_entity")
         caps_in = body.get("capabilities")
 
         if not user_entity or not isinstance(user_entity, str):
+            log.error(f"Failed processing CephX overwrite caps request: {user_entity}")
             return cors_400(details="'user_entity' is required and must be a string")
 
         # Accept either:
@@ -303,18 +306,22 @@ def overwrite_user_caps(cluster, body):  # noqa: E501
         elif isinstance(caps_in, dict):
             capabilities = [{"type": k, "value": v} for k, v in caps_in.items()]
         else:
+            log.error(f"Failed processing CephX overwrite caps request: {caps_in}")
             return cors_400(details="'capabilities' must be a list of {type,value} or a dict of component->rule")
 
         # Validate cluster & build client
         cfg: Config = g.config
         if cluster not in cfg.cluster:
+            log.error(f"Failed processing CephX overwrite caps request: {cluster}")
             return cors_400(details=f"Unknown cluster '{cluster}'")
 
         dc = DashClient.for_cluster(cluster, cfg.cluster[cluster])
 
         # PUT to Dashboard (overwrites caps)
+        log.debug(f"Processing CephX overwrite caps request entity: {user_entity} capabilities: {capabilities}")
         status, detail = dc.update_user_caps(user_entity, capabilities)
         if status not in (200, 201, 202):
+            log.error(f"Failed processing CephX overwrite caps request: {status}: {detail}")
             return cors_500(details=f"Dashboard returned HTTP {status}:{detail} while updating caps")
 
         # Build response

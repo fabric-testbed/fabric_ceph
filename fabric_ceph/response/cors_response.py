@@ -63,7 +63,7 @@ def cors_200(response_body: Union[Version, Users] = None) -> Response:
     )
 
 
-def cors_200_no_content(details: str = None) -> Response:
+def cors_200_no_content(details: str|dict = None) -> Response:
     """
     Return 200 - No Content
     """

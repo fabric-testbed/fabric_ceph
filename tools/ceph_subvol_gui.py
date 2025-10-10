@@ -326,8 +326,8 @@ def launch():
         try:
             if reports:
                 query_start = datetime.datetime.now(datetime.timezone.utc)
-                users = reports.query_users(user_active=True, fetch_all=True, query_start=query_start)
-                projects = reports.query_projects(project_active=True, fetch_all=True, query_start=query_start)
+                users = reports.query_users(user_active=True, fetch_all=True, end_time=query_start)
+                projects = reports.query_projects(project_active=True, fetch_all=True, end_time=query_start)
                 users_cache = _extract_users(users)
                 projects_cache = _extract_projects(projects)
                 user_dd.options = [(_user_label(u), i) for i, u in enumerate(users_cache)]
@@ -864,7 +864,7 @@ def launch():
                 try:
                     query_start = datetime.datetime.now(datetime.timezone.utc)
                     resp = reports.query_users(user_active=True, fetch_all=True, project_id=[proj_id],
-                                               query_start=query_start)
+                                               end_time=query_start)
                     data = (resp or {}).get("data", [])
                 except Exception as e:
                     data = []
@@ -903,7 +903,7 @@ def launch():
                 try:
                     query_start = datetime.datetime.now(datetime.timezone.utc)
                     resp = reports.query_users(user_active=True, fetch_all=True, project_id=[proj_id],
-                                               query_start=query_start)
+                                               end_time=query_start)
                     data = (resp or {}).get("data", [])
                 except Exception as e:
                     data = []

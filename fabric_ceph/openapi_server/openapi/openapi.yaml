@@ -22,6 +22,9 @@ tags:
 - name: Cluster User
 - name: CephFS
 - name: version
+- name: S3 User
+- name: S3 Bucket
+- name: S3 Policy
 paths:
   /cephfs/subvolume/group/{vol_name}:
     delete:
@@ -944,6 +947,891 @@ paths:
       tags:
       - Cluster User
       x-openapi-router-controller: fabric_ceph.openapi_server.controllers.cluster_user_controller
+  /s3/bucket:
+    get:
+      operationId: list_s3_buckets
+      parameters:
+      - description: Target cluster/region identifier as defined by the service config.
+        explode: true
+        in: query
+        name: cluster
+        required: true
+        schema:
+          example: europe
+          type: string
+        style: form
+      - description: "If provided, returns buckets owned by this user only"
+        explode: true
+        in: query
+        name: uid
+        required: false
+        schema:
+          type: string
+        style: form
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/S3BucketList"
+          description: OK
+      security:
+      - bearerAuth: []
+      summary: List buckets (optionally by owner)
+      tags:
+      - S3 Bucket
+      x-openapi-router-controller: fabric_ceph.openapi_server.controllers.s3_bucket_controller
+    post:
+      operationId: create_s3_bucket
+      parameters:
+      - description: Target cluster/region identifier as defined by the service config.
+        explode: true
+        in: query
+        name: cluster
+        required: true
+        schema:
+          example: europe
+          type: string
+        style: form
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateS3BucketRequest"
+        required: true
+      responses:
+        "201":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/S3Bucket"
+          description: Created
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/status_400_bad_request"
+          description: Bad Request
+      security:
+      - bearerAuth: []
+      summary: Create a bucket
+      tags:
+      - S3 Bucket
+      x-openapi-router-controller: fabric_ceph.openapi_server.controllers.s3_bucket_controller
+  /s3/bucket/{bucket}:
+    delete:
+      description: Optionally purge objects prior to deletion.
+      operationId: delete_s3_bucket
+      parameters:
+      - description: Target cluster/region identifier as defined by the service config.
+        explode: true
+        in: query
+        name: cluster
+        required: true
+        schema:
+          example: europe
+          type: string
+        style: form
+      - explode: false
+        in: path
+        name: bucket
+        required: true
+        schema:
+          type: string
+        style: simple
+      - explode: true
+        in: query
+        name: purge_objects
+        required: false
+        schema:
+          default: false
+          type: boolean
+        style: form
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/status_200_ok_no_content"
+          description: OK
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/status_400_bad_request"
+          description: Conflict (bucket not empty and purge not requested)
+      security:
+      - bearerAuth: []
+      summary: Delete a bucket
+      tags:
+      - S3 Bucket
+      x-openapi-router-controller: fabric_ceph.openapi_server.controllers.s3_bucket_controller
+    get:
+      operationId: get_s3_bucket
+      parameters:
+      - description: Target cluster/region identifier as defined by the service config.
+        explode: true
+        in: query
+        name: cluster
+        required: true
+        schema:
+          example: europe
+          type: string
+        style: form
+      - explode: false
+        in: path
+        name: bucket
+        required: true
+        schema:
+          type: string
+        style: simple
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/S3Bucket"
+          description: OK
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/status_404_not_found"
+          description: Not Found
+      security:
+      - bearerAuth: []
+      summary: Get bucket stats/owner/placement
+      tags:
+      - S3 Bucket
+      x-openapi-router-controller: fabric_ceph.openapi_server.controllers.s3_bucket_controller
+  /s3/bucket/{bucket}/acl:
+    get:
+      operationId: get_s3_bucket_acl
+      parameters:
+      - description: Target cluster/region identifier as defined by the service config.
+        explode: true
+        in: query
+        name: cluster
+        required: true
+        schema:
+          example: europe
+          type: string
+        style: form
+      - explode: false
+        in: path
+        name: bucket
+        required: true
+        schema:
+          type: string
+        style: simple
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/S3Acl"
+            application/xml:
+              schema:
+                type: string
+          description: OK
+      security:
+      - bearerAuth: []
+      summary: Get bucket ACL (Canned or XML)
+      tags:
+      - S3 Policy
+      x-openapi-router-controller: fabric_ceph.openapi_server.controllers.s3_policy_controller
+    put:
+      operationId: put_s3_bucket_acl
+      parameters:
+      - description: Target cluster/region identifier as defined by the service config.
+        explode: true
+        in: query
+        name: cluster
+        required: true
+        schema:
+          example: europe
+          type: string
+        style: form
+      - explode: false
+        in: path
+        name: bucket
+        required: true
+        schema:
+          type: string
+        style: simple
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/S3Acl"
+          application/xml:
+            schema:
+              type: string
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/status_200_ok_no_content"
+          description: OK
+      security:
+      - bearerAuth: []
+      summary: Set bucket ACL (Canned or XML)
+      tags:
+      - S3 Policy
+      x-openapi-router-controller: fabric_ceph.openapi_server.controllers.s3_policy_controller
+  /s3/bucket/{bucket}/policy:
+    delete:
+      operationId: delete_s3_bucket_policy
+      parameters:
+      - description: Target cluster/region identifier as defined by the service config.
+        explode: true
+        in: query
+        name: cluster
+        required: true
+        schema:
+          example: europe
+          type: string
+        style: form
+      - explode: false
+        in: path
+        name: bucket
+        required: true
+        schema:
+          type: string
+        style: simple
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/status_200_ok_no_content"
+          description: OK
+      security:
+      - bearerAuth: []
+      summary: Delete bucket policy
+      tags:
+      - S3 Policy
+      x-openapi-router-controller: fabric_ceph.openapi_server.controllers.s3_policy_controller
+    get:
+      operationId: get_s3_bucket_policy
+      parameters:
+      - description: Target cluster/region identifier as defined by the service config.
+        explode: true
+        in: query
+        name: cluster
+        required: true
+        schema:
+          example: europe
+          type: string
+        style: form
+      - explode: false
+        in: path
+        name: bucket
+        required: true
+        schema:
+          type: string
+        style: simple
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/S3PolicyDocument"
+          description: OK
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/status_404_not_found"
+          description: Not Found
+      security:
+      - bearerAuth: []
+      summary: Get bucket policy (IAM JSON)
+      tags:
+      - S3 Policy
+      x-openapi-router-controller: fabric_ceph.openapi_server.controllers.s3_policy_controller
+    put:
+      operationId: put_s3_bucket_policy
+      parameters:
+      - description: Target cluster/region identifier as defined by the service config.
+        explode: true
+        in: query
+        name: cluster
+        required: true
+        schema:
+          example: europe
+          type: string
+        style: form
+      - explode: false
+        in: path
+        name: bucket
+        required: true
+        schema:
+          type: string
+        style: simple
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/S3PolicyDocument"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/status_200_ok_no_content"
+          description: OK
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/status_400_bad_request"
+          description: Bad policy document
+      security:
+      - bearerAuth: []
+      summary: Set/replace bucket policy (IAM JSON)
+      tags:
+      - S3 Policy
+      x-openapi-router-controller: fabric_ceph.openapi_server.controllers.s3_policy_controller
+  /s3/bucket/{bucket}/quota:
+    put:
+      operationId: set_s3_bucket_quota
+      parameters:
+      - description: Target cluster/region identifier as defined by the service config.
+        explode: true
+        in: query
+        name: cluster
+        required: true
+        schema:
+          example: europe
+          type: string
+        style: form
+      - explode: false
+        in: path
+        name: bucket
+        required: true
+        schema:
+          type: string
+        style: simple
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/S3BucketQuotaRequest"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/status_200_ok_no_content"
+          description: OK
+      security:
+      - bearerAuth: []
+      summary: Set bucket-level quota
+      tags:
+      - S3 Bucket
+      x-openapi-router-controller: fabric_ceph.openapi_server.controllers.s3_bucket_controller
+  /s3/bucket/{bucket}/versioning:
+    put:
+      operationId: set_s3_bucket_versioning
+      parameters:
+      - description: Target cluster/region identifier as defined by the service config.
+        explode: true
+        in: query
+        name: cluster
+        required: true
+        schema:
+          example: europe
+          type: string
+        style: form
+      - explode: false
+        in: path
+        name: bucket
+        required: true
+        schema:
+          type: string
+        style: simple
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/S3BucketVersioningRequest"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/status_200_ok_no_content"
+          description: OK
+      security:
+      - bearerAuth: []
+      summary: Enable/disable versioning
+      tags:
+      - S3 Bucket
+      x-openapi-router-controller: fabric_ceph.openapi_server.controllers.s3_bucket_controller
+  /s3/user:
+    get:
+      operationId: list_s3_users
+      parameters:
+      - description: Target cluster/region identifier as defined by the service config.
+        explode: true
+        in: query
+        name: cluster
+        required: true
+        schema:
+          example: europe
+          type: string
+        style: form
+      - description: Filter by a specific user id (exact match)
+        explode: true
+        in: query
+        name: uid
+        required: false
+        schema:
+          type: string
+        style: form
+      - description: Case-insensitive substring match on uid or display_name
+        explode: true
+        in: query
+        name: search
+        required: false
+        schema:
+          type: string
+        style: form
+      - explode: true
+        in: query
+        name: limit
+        required: false
+        schema:
+          default: 100
+          minimum: 1
+          type: integer
+        style: form
+      - explode: true
+        in: query
+        name: offset
+        required: false
+        schema:
+          default: 0
+          minimum: 0
+          type: integer
+        style: form
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/S3UserList"
+          description: OK
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/status_401_unauthorized"
+          description: Unauthorized
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/status_403_forbidden"
+          description: Forbidden
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/status_500_internal_server_error"
+          description: Internal Server Error
+      security:
+      - bearerAuth: []
+      summary: List RGW (S3) users
+      tags:
+      - S3 User
+      x-openapi-router-controller: fabric_ceph.openapi_server.controllers.s3_user_controller
+    post:
+      description: Mirrors radosgw-admin user create/modify with sensible defaults.
+      operationId: upsert_s3_user
+      parameters:
+      - description: Target cluster/region identifier as defined by the service config.
+        explode: true
+        in: query
+        name: cluster
+        required: true
+        schema:
+          example: europe
+          type: string
+        style: form
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateOrUpdateS3UserRequest"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/S3User"
+          description: OK (created or updated)
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/status_400_bad_request"
+          description: Bad Request
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/status_401_unauthorized"
+          description: Unauthorized
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/status_403_forbidden"
+          description: Forbidden
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/status_500_internal_server_error"
+          description: Internal Server Error
+      security:
+      - bearerAuth: []
+      summary: Create or update an RGW user (upsert)
+      tags:
+      - S3 User
+      x-openapi-router-controller: fabric_ceph.openapi_server.controllers.s3_user_controller
+  /s3/user/{uid}:
+    delete:
+      operationId: delete_s3_user
+      parameters:
+      - description: Target cluster/region identifier as defined by the service config.
+        explode: true
+        in: query
+        name: cluster
+        required: true
+        schema:
+          example: europe
+          type: string
+        style: form
+      - explode: false
+        in: path
+        name: uid
+        required: true
+        schema:
+          type: string
+        style: simple
+      - description: Also purge buckets/objects owned by the user (dangerous)
+        explode: true
+        in: query
+        name: purge_data
+        required: false
+        schema:
+          default: false
+          type: boolean
+        style: form
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/status_200_ok_no_content"
+          description: OK
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/status_404_not_found"
+          description: Not Found
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/status_400_bad_request"
+          description: Bad Request
+      security:
+      - bearerAuth: []
+      summary: Delete RGW user
+      tags:
+      - S3 User
+      x-openapi-router-controller: fabric_ceph.openapi_server.controllers.s3_user_controller
+    get:
+      operationId: get_s3_user
+      parameters:
+      - description: Target cluster/region identifier as defined by the service config.
+        explode: true
+        in: query
+        name: cluster
+        required: true
+        schema:
+          example: europe
+          type: string
+        style: form
+      - explode: false
+        in: path
+        name: uid
+        required: true
+        schema:
+          type: string
+        style: simple
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/S3User"
+          description: OK
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/status_404_not_found"
+          description: Not Found
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/status_401_unauthorized"
+          description: Unauthorized
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/status_403_forbidden"
+          description: Forbidden
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/status_500_internal_server_error"
+          description: Internal Server Error
+      security:
+      - bearerAuth: []
+      summary: Get RGW user
+      tags:
+      - S3 User
+      x-openapi-router-controller: fabric_ceph.openapi_server.controllers.s3_user_controller
+  /s3/user/{uid}/keys:
+    delete:
+      operationId: delete_s3_user_key
+      parameters:
+      - description: Target cluster/region identifier as defined by the service config.
+        explode: true
+        in: query
+        name: cluster
+        required: true
+        schema:
+          example: europe
+          type: string
+        style: form
+      - explode: false
+        in: path
+        name: uid
+        required: true
+        schema:
+          type: string
+        style: simple
+      - explode: true
+        in: query
+        name: access_key
+        required: true
+        schema:
+          type: string
+        style: form
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/status_200_ok_no_content"
+          description: OK
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/status_404_not_found"
+          description: Not Found
+      security:
+      - bearerAuth: []
+      summary: Delete an access key
+      tags:
+      - S3 User
+      x-openapi-router-controller: fabric_ceph.openapi_server.controllers.s3_user_controller
+    get:
+      operationId: list_s3_user_keys
+      parameters:
+      - description: Target cluster/region identifier as defined by the service config.
+        explode: true
+        in: query
+        name: cluster
+        required: true
+        schema:
+          example: europe
+          type: string
+        style: form
+      - explode: false
+        in: path
+        name: uid
+        required: true
+        schema:
+          type: string
+        style: simple
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                items:
+                  $ref: "#/components/schemas/S3KeyPair"
+                type: array
+          description: OK
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/status_404_not_found"
+          description: Not Found
+      security:
+      - bearerAuth: []
+      summary: List S3 access keys for a user
+      tags:
+      - S3 User
+      x-openapi-router-controller: fabric_ceph.openapi_server.controllers.s3_user_controller
+    post:
+      description: "If `access_key` and `secret_key` omitted, a new pair is generated."
+      operationId: create_s3_user_key
+      parameters:
+      - description: Target cluster/region identifier as defined by the service config.
+        explode: true
+        in: query
+        name: cluster
+        required: true
+        schema:
+          example: europe
+          type: string
+        style: form
+      - explode: false
+        in: path
+        name: uid
+        required: true
+        schema:
+          type: string
+        style: simple
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateS3KeyRequest"
+        required: false
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/S3KeyPair"
+          description: OK
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/status_404_not_found"
+          description: Not Found
+      security:
+      - bearerAuth: []
+      summary: Create or set an access key
+      tags:
+      - S3 User
+      x-openapi-router-controller: fabric_ceph.openapi_server.controllers.s3_user_controller
+  /s3/user/{uid}/quota:
+    get:
+      operationId: get_s3_quota
+      parameters:
+      - description: Target cluster/region identifier as defined by the service config.
+        explode: true
+        in: query
+        name: cluster
+        required: true
+        schema:
+          example: europe
+          type: string
+        style: form
+      - explode: false
+        in: path
+        name: uid
+        required: true
+        schema:
+          type: string
+        style: simple
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/S3Quota"
+          description: OK
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/status_404_not_found"
+          description: Not Found
+      security:
+      - bearerAuth: []
+      summary: Get user & bucket quota
+      tags:
+      - S3 User
+      x-openapi-router-controller: fabric_ceph.openapi_server.controllers.s3_user_controller
+    put:
+      operationId: set_s3_quota
+      parameters:
+      - description: Target cluster/region identifier as defined by the service config.
+        explode: true
+        in: query
+        name: cluster
+        required: true
+        schema:
+          example: europe
+          type: string
+        style: form
+      - explode: false
+        in: path
+        name: uid
+        required: true
+        schema:
+          type: string
+        style: simple
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/S3QuotaRequest"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/status_200_ok_no_content"
+          description: OK
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/status_400_bad_request"
+          description: Bad Request
+      security:
+      - bearerAuth: []
+      summary: Set user and/or bucket quota
+      tags:
+      - S3 User
+      x-openapi-router-controller: fabric_ceph.openapi_server.controllers.s3_user_controller
   /version:
     get:
       description: Version
@@ -1934,6 +2822,510 @@ components:
           type: string
       title: ClusterInfoItem
       type: object
+    S3UserList:
+      allOf:
+      - $ref: "#/components/schemas/status_200_ok_paginated"
+      - properties:
+          type:
+            example: s3_users
+            type: string
+          data:
+            items:
+              $ref: "#/components/schemas/S3User"
+            type: array
+        type: object
+      example:
+        total: 5
+        offset: 6
+        size: 1
+        data:
+        - uid: demo
+          user_quota:
+            max_objects: 1000000
+            max_size_kb: 104857600
+            enabled: false
+          system: false
+          keys:
+          - secret_key: very-secret
+            access_key: AKIA...
+            user: project123
+            status: active
+          - secret_key: very-secret
+            access_key: AKIA...
+            user: project123
+            status: active
+          max_buckets: 1000
+          op_mask: op_mask
+          display_name: Demo User
+          email: demo@example.org
+          suspended: false
+          bucket_quota:
+            max_objects: 1000000
+            max_size_kb: 104857600
+            enabled: false
+          caps:
+          - perm: '*'
+            type: buckets
+          - perm: '*'
+            type: buckets
+        - uid: demo
+          user_quota:
+            max_objects: 1000000
+            max_size_kb: 104857600
+            enabled: false
+          system: false
+          keys:
+          - secret_key: very-secret
+            access_key: AKIA...
+            user: project123
+            status: active
+          - secret_key: very-secret
+            access_key: AKIA...
+            user: project123
+            status: active
+          max_buckets: 1000
+          op_mask: op_mask
+          display_name: Demo User
+          email: demo@example.org
+          suspended: false
+          bucket_quota:
+            max_objects: 1000000
+            max_size_kb: 104857600
+            enabled: false
+          caps:
+          - perm: '*'
+            type: buckets
+          - perm: '*'
+            type: buckets
+        limit: 0
+        type: s3_users
+        status: 5
+      title: S3UserList
+    S3User:
+      example:
+        uid: demo
+        user_quota:
+          max_objects: 1000000
+          max_size_kb: 104857600
+          enabled: false
+        system: false
+        keys:
+        - secret_key: very-secret
+          access_key: AKIA...
+          user: project123
+          status: active
+        - secret_key: very-secret
+          access_key: AKIA...
+          user: project123
+          status: active
+        max_buckets: 1000
+        op_mask: op_mask
+        display_name: Demo User
+        email: demo@example.org
+        suspended: false
+        bucket_quota:
+          max_objects: 1000000
+          max_size_kb: 104857600
+          enabled: false
+        caps:
+        - perm: '*'
+          type: buckets
+        - perm: '*'
+          type: buckets
+      properties:
+        uid:
+          example: demo
+          title: uid
+          type: string
+        display_name:
+          example: Demo User
+          title: display_name
+          type: string
+        email:
+          example: demo@example.org
+          nullable: true
+          title: email
+          type: string
+        max_buckets:
+          example: 1000
+          title: max_buckets
+          type: integer
+        suspended:
+          default: false
+          title: suspended
+          type: boolean
+        caps:
+          description: RGW admin caps (if enabled); not IAM
+          items:
+            $ref: "#/components/schemas/S3User_caps_inner"
+          title: caps
+          type: array
+        keys:
+          items:
+            $ref: "#/components/schemas/S3KeyPair"
+          title: keys
+          type: array
+        user_quota:
+          $ref: "#/components/schemas/S3QuotaEntry"
+        bucket_quota:
+          $ref: "#/components/schemas/S3QuotaEntry"
+        system:
+          default: false
+          title: system
+          type: boolean
+        op_mask:
+          nullable: true
+          title: op_mask
+          type: string
+      title: S3User
+      type: object
+    CreateOrUpdateS3UserRequest:
+      example:
+        uid: project123
+        system: false
+        keys:
+        - secret_key: secret_key
+          access_key: access_key
+          generate: true
+        - secret_key: secret_key
+          access_key: access_key
+          generate: true
+        max_buckets: 0
+        op_mask: op_mask
+        display_name: Project 123 Service Account
+        email: email
+        suspended: false
+        caps:
+        - perm: '*'
+          type: users
+        - perm: '*'
+          type: users
+      properties:
+        uid:
+          example: project123
+          title: uid
+          type: string
+        display_name:
+          example: Project 123 Service Account
+          title: display_name
+          type: string
+        email:
+          nullable: true
+          title: email
+          type: string
+        suspended:
+          default: false
+          title: suspended
+          type: boolean
+        max_buckets:
+          default: 1000
+          title: max_buckets
+          type: integer
+        system:
+          default: false
+          title: system
+          type: boolean
+        op_mask:
+          nullable: true
+          title: op_mask
+          type: string
+        caps:
+          items:
+            $ref: "#/components/schemas/CreateOrUpdateS3UserRequest_caps_inner"
+          title: caps
+          type: array
+        keys:
+          description: Optional explicit keypairs to set; omit to auto-generate none.
+          items:
+            $ref: "#/components/schemas/CreateS3KeyRequest"
+          title: keys
+          type: array
+      required:
+      - uid
+      title: CreateOrUpdateS3UserRequest
+      type: object
+    S3KeyPair:
+      example:
+        secret_key: very-secret
+        access_key: AKIA...
+        user: project123
+        status: active
+      properties:
+        user:
+          example: project123
+          title: user
+          type: string
+        access_key:
+          example: AKIA...
+          title: access_key
+          type: string
+        secret_key:
+          example: very-secret
+          title: secret_key
+          type: string
+        status:
+          example: active
+          title: status
+          type: string
+      title: S3KeyPair
+      type: object
+    CreateS3KeyRequest:
+      example:
+        secret_key: secret_key
+        access_key: access_key
+        generate: true
+      properties:
+        access_key:
+          nullable: true
+          title: access_key
+          type: string
+        secret_key:
+          nullable: true
+          title: secret_key
+          type: string
+        generate:
+          default: true
+          title: generate
+          type: boolean
+      title: CreateS3KeyRequest
+      type: object
+    S3Quota:
+      example:
+        user_quota:
+          max_objects: 1000000
+          max_size_kb: 104857600
+          enabled: false
+        bucket_quota:
+          max_objects: 1000000
+          max_size_kb: 104857600
+          enabled: false
+      properties:
+        user_quota:
+          $ref: "#/components/schemas/S3QuotaEntry"
+        bucket_quota:
+          $ref: "#/components/schemas/S3QuotaEntry"
+      title: S3Quota
+      type: object
+    S3QuotaEntry:
+      example:
+        max_objects: 1000000
+        max_size_kb: 104857600
+        enabled: false
+      properties:
+        enabled:
+          default: false
+          title: enabled
+          type: boolean
+        max_size_kb:
+          example: 104857600
+          nullable: true
+          title: max_size_kb
+          type: integer
+        max_objects:
+          example: 1000000
+          nullable: true
+          title: max_objects
+          type: integer
+      title: S3QuotaEntry
+      type: object
+    S3QuotaRequest:
+      example:
+        user_quota:
+          max_objects: 1000000
+          max_size_kb: 104857600
+          enabled: false
+        bucket_quota:
+          max_objects: 1000000
+          max_size_kb: 104857600
+          enabled: false
+      properties:
+        user_quota:
+          $ref: "#/components/schemas/S3QuotaEntry"
+        bucket_quota:
+          $ref: "#/components/schemas/S3QuotaEntry"
+      title: S3QuotaRequest
+      type: object
+    S3BucketList:
+      allOf:
+      - $ref: "#/components/schemas/status_200_ok_paginated"
+      - properties:
+          type:
+            example: s3_buckets
+            type: string
+          data:
+            items:
+              $ref: "#/components/schemas/S3BucketList_allOf_data"
+            type: array
+        type: object
+      example:
+        total: 5
+        offset: 6
+        size: 1
+        data:
+        - owner: project123
+          name: my-bucket
+        - owner: project123
+          name: my-bucket
+        limit: 0
+        type: s3_buckets
+        status: 5
+      title: S3BucketList
+    S3Bucket:
+      example:
+        owner: project123
+        versioning: Disabled
+        zonegroup: us-east
+        size_kb: 8192
+        placement_rule: default-placement
+        zone: us-east-1a
+        num_objects: 42
+        name: my-bucket
+      properties:
+        name:
+          example: my-bucket
+          title: name
+          type: string
+        owner:
+          example: project123
+          title: owner
+          type: string
+        num_objects:
+          example: 42
+          title: num_objects
+          type: integer
+        size_kb:
+          example: 8192
+          title: size_kb
+          type: integer
+        placement_rule:
+          example: default-placement
+          nullable: true
+          title: placement_rule
+          type: string
+        zonegroup:
+          example: us-east
+          nullable: true
+          title: zonegroup
+          type: string
+        zone:
+          example: us-east-1a
+          nullable: true
+          title: zone
+          type: string
+        versioning:
+          enum:
+          - Enabled
+          - Suspended
+          - Disabled
+          example: Disabled
+          title: versioning
+          type: string
+      title: S3Bucket
+      type: object
+    CreateS3BucketRequest:
+      example:
+        bucket: my-bucket
+        uid: project123
+        versioning: Disabled
+        placement_rule: placement_rule
+      properties:
+        bucket:
+          example: my-bucket
+          title: bucket
+          type: string
+        uid:
+          description: Owner uid
+          example: project123
+          title: uid
+          type: string
+        placement_rule:
+          nullable: true
+          title: placement_rule
+          type: string
+        versioning:
+          default: Disabled
+          enum:
+          - Enabled
+          - Suspended
+          - Disabled
+          title: versioning
+          type: string
+      required:
+      - bucket
+      - uid
+      title: CreateS3BucketRequest
+      type: object
+    S3BucketVersioningRequest:
+      example:
+        status: Enabled
+      properties:
+        status:
+          enum:
+          - Enabled
+          - Suspended
+          - Disabled
+          title: status
+          type: string
+      required:
+      - status
+      title: S3BucketVersioningRequest
+      type: object
+    S3BucketQuotaRequest:
+      example:
+        max_objects: 6
+        max_size_kb: 0
+        enabled: true
+      properties:
+        enabled:
+          default: true
+          title: enabled
+          type: boolean
+        max_size_kb:
+          nullable: true
+          title: max_size_kb
+          type: integer
+        max_objects:
+          nullable: true
+          title: max_objects
+          type: integer
+      title: S3BucketQuotaRequest
+      type: object
+    S3PolicyDocument:
+      additionalProperties: true
+      description: Standard S3-style IAM policy JSON for a bucket.
+      example:
+        Version: 2012-10-17
+        Statement:
+        - Effect: Allow
+          Principal: '*'
+          Action:
+          - s3:GetObject
+          Resource: arn:aws:s3:::my-bucket/*
+      type: object
+    S3Acl:
+      description: Canned ACL or parsed ACL structure.
+      example:
+        grants:
+        - grantee: uri:http://acs.amazonaws.com/groups/global/AllUsers
+          permission: READ
+        - grantee: uri:http://acs.amazonaws.com/groups/global/AllUsers
+          permission: READ
+        canned: public-read
+      properties:
+        canned:
+          description: One of private|public-read|public-read-write|authenticated-read
+          example: public-read
+          nullable: true
+          title: canned
+          type: string
+        grants:
+          items:
+            $ref: "#/components/schemas/S3Acl_grants_inner"
+          nullable: true
+          title: grants
+          type: array
+      title: S3Acl
+      type: object
     SubvolumeList_allOf_data:
       oneOf:
       - type: string
@@ -1965,6 +3357,66 @@ components:
           title: v1
           type: string
       title: ClusterInfoItem_mons_inner
+      type: object
+    S3User_caps_inner:
+      example:
+        perm: '*'
+        type: buckets
+      properties:
+        type:
+          example: buckets
+          title: type
+          type: string
+        perm:
+          example: '*'
+          title: perm
+          type: string
+      title: S3User_caps_inner
+      type: object
+    CreateOrUpdateS3UserRequest_caps_inner:
+      example:
+        perm: '*'
+        type: users
+      properties:
+        type:
+          example: users
+          title: type
+          type: string
+        perm:
+          example: '*'
+          title: perm
+          type: string
+      title: CreateOrUpdateS3UserRequest_caps_inner
+      type: object
+    S3BucketList_allOf_data:
+      example:
+        owner: project123
+        name: my-bucket
+      properties:
+        name:
+          example: my-bucket
+          title: name
+          type: string
+        owner:
+          example: project123
+          title: owner
+          type: string
+      title: S3BucketList_allOf_data
+      type: object
+    S3Acl_grants_inner:
+      example:
+        grantee: uri:http://acs.amazonaws.com/groups/global/AllUsers
+        permission: READ
+      properties:
+        grantee:
+          example: uri:http://acs.amazonaws.com/groups/global/AllUsers
+          title: grantee
+          type: string
+        permission:
+          example: READ
+          title: permission
+          type: string
+      title: S3Acl_grants_inner
       type: object
   securitySchemes:
     bearerAuth:

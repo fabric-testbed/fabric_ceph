@@ -25,6 +25,7 @@ NEW
 
 from __future__ import annotations
 
+import datetime
 import os
 import json
 import traceback
@@ -74,33 +75,107 @@ def _slugify_subvol_from_project(p: dict) -> str:
 def _bytes_from_gib(gib: int) -> int:
     return int(gib) * 1024**3
 
+from typing import Any, Dict, List, Iterable
+
 def _extract_users(rows: Any) -> List[Dict[str, Any]]:
+    """
+    Normalize and extract unique user dicts from an API-style response.
+
+    Accepts:
+      - dict with optional "data" key (list of rows)
+      - list/iterable of row dicts
+      - None
+
+    A "user" is any dict containing at least one of:
+      bastion_login, user_email, user_id
+
+    Deduplicates by (bastion_login || user_email || user_id), first occurrence wins.
+    Sorts by bastion_login, then user_email, then user_id (all case-insensitive).
+    """
+    # 1) Normalize input
     if isinstance(rows, dict):
         rows = rows.get("data", [])
-    out = []
-    for r in rows or []:
+    if rows is None:
+        rows = []
+    if not isinstance(rows, Iterable) or isinstance(rows, (str, bytes)):
+        rows = [rows]
+
+    # 2) Filter valid user-like dicts
+    candidates: List[Dict[str, Any]] = []
+    for r in rows:
         if isinstance(r, dict) and ("bastion_login" in r or "user_email" in r or "user_id" in r):
-            out.append(r)
-    seen, uniq = set(), []
-    for r in out:
+            candidates.append(r)
+
+    # 3) Deduplicate by preferred key order
+    seen = set()
+    unique: List[Dict[str, Any]] = []
+    for r in candidates:
         key = r.get("bastion_login") or r.get("user_email") or r.get("user_id")
         if key and key not in seen:
-            seen.add(key); uniq.append(r)
-    return uniq
+            seen.add(key)
+            unique.append(r)
+
+    # 4) Sort by bastion_login -> user_email -> user_id (case-insensitive)
+    def sort_key(d: Dict[str, Any]):
+        bl = d.get("bastion_login")
+        em = d.get("user_email")
+        uid = d.get("user_id")
+        return (
+            (str(bl).lower() if bl is not None else ""),
+            (str(em).lower() if em is not None else ""),
+            (str(uid).lower() if uid is not None else ""),
+        )
+
+    unique.sort(key=sort_key)
+    return unique
 
 def _extract_projects(rows: Any) -> List[Dict[str, Any]]:
+    """
+    Normalize and extract unique project dicts from an API-style response.
+
+    Accepts:
+      - dict with optional "data" key (list of rows)
+      - list/iterable of row dicts
+      - None
+
+    Keeps only items that are dicts containing "project_id".
+    Deduplicates by project_id (first occurrence wins).
+    Sorts by project_name (case-insensitive), falling back to project_id.
+    """
+    # 1) Normalize input -> iterable of rows
     if isinstance(rows, dict):
         rows = rows.get("data", [])
-    out = []
-    for r in rows or []:
+    if rows is None:
+        rows = []
+    if not isinstance(rows, Iterable) or isinstance(rows, (str, bytes)):
+        rows = [rows]  # unexpected scalar: treat as single row
+
+    # 2) Filter valid project dicts
+    candidates: List[Dict[str, Any]] = []
+    for r in rows:
         if isinstance(r, dict) and "project_id" in r:
-            out.append(r)
-    seen, uniq = set(), []
-    for r in out:
-        key = r.get("project_id")
-        if key and key not in seen:
-            seen.add(key); uniq.append(r)
-    return uniq
+            candidates.append(r)
+
+    # 3) Deduplicate by project_id (first wins)
+    seen: set = set()
+    unique: List[Dict[str, Any]] = []
+    for r in candidates:
+        pid = r.get("project_id")
+        if pid and pid not in seen:
+            seen.add(pid)
+            unique.append(r)
+
+    # 4) Sort by project_name (case-insensitive), fallback to project_id
+    def sort_key(d: Dict[str, Any]) -> tuple:
+        name = d.get("project_name")
+        pid = d.get("project_id")
+        # ensure stable, comparable keys
+        name_key = (str(name).lower() if name is not None else "")
+        id_key = (str(pid) if pid is not None else "")
+        return (name_key, id_key)
+
+    unique.sort(key=sort_key)
+    return unique
 
 def _user_label(u: Dict[str, Any]) -> str:
     bl = u.get("bastion_login") or ""
@@ -188,7 +263,7 @@ def launch():
     project_dd = W.Dropdown(description="Project", options=[], disabled=True)
     user_dd = W.Dropdown(description="User", options=[], disabled=False)
     name = W.Text(description="Subvol Name", placeholder="Per-user: auto (bastion). Per-project: required.")
-    size_gib = W.BoundedIntText(description="Size (GiB)", min=1, max=1024*1024, value=50)
+    size_gib = W.BoundedIntText(description="Size (GiB)", min=1, max=1024*1024, value=10)
     create_btn = W.Button(description="Create/Resize", button_style="success")
 
     # Browse by group
@@ -250,8 +325,9 @@ def launch():
         nonlocal users_cache, projects_cache
         try:
             if reports:
-                users = reports.query_users(user_active=True, fetch_all=True)
-                projects = reports.query_projects(project_active=True, fetch_all=True)
+                query_start = datetime.datetime.now(datetime.timezone.utc)
+                users = reports.query_users(user_active=True, fetch_all=True, end_time=query_start)
+                projects = reports.query_projects(project_active=True, fetch_all=True, end_time=query_start)
                 users_cache = _extract_users(users)
                 projects_cache = _extract_projects(projects)
                 user_dd.options = [(_user_label(u), i) for i, u in enumerate(users_cache)]
@@ -786,7 +862,9 @@ def launch():
                 proj = projects_cache[apply_project_dd.value]
                 proj_id = proj.get("project_id")
                 try:
-                    resp = reports.query_users(user_active=True, fetch_all=True, project_id=[proj_id])
+                    query_start = datetime.datetime.now(datetime.timezone.utc)
+                    resp = reports.query_users(user_active=True, fetch_all=True, project_id=[proj_id],
+                                               end_time=query_start)
                     data = (resp or {}).get("data", [])
                 except Exception as e:
                     data = []
@@ -823,7 +901,9 @@ def launch():
                 proj = projects_cache[apply_project_dd.value]
                 proj_id = proj.get("project_id")
                 try:
-                    resp = reports.query_users(user_active=True, fetch_all=True, project_id=[proj_id])
+                    query_start = datetime.datetime.now(datetime.timezone.utc)
+                    resp = reports.query_users(user_active=True, fetch_all=True, project_id=[proj_id],
+                                               end_time=query_start)
                     data = (resp or {}).get("data", [])
                 except Exception as e:
                     data = []

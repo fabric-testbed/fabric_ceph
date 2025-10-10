@@ -24,8 +24,406 @@ tags:
   - name: Cluster User
   - name: CephFS
   - name: version
-
+  - name: S3 User
+  - name: S3 Bucket
+  - name: S3 Policy
 paths:
+
+  # ---------- S3 USERS ----------
+  /s3/user:
+    get:
+      tags: [S3 User]
+      summary: List RGW (S3) users
+      operationId: listS3Users
+      security: [ { bearerAuth: [] } ]
+      parameters:
+        - $ref: '#/components/parameters/clusterParam'
+        - in: query
+          name: uid
+          required: false
+          schema: { type: string }
+          description: Filter by a specific user id (exact match)
+        - in: query
+          name: search
+          required: false
+          schema: { type: string }
+          description: Case-insensitive substring match on uid or display_name
+        - in: query
+          name: limit
+          required: false
+          schema: { type: integer, minimum: 1, default: 100 }
+        - in: query
+          name: offset
+          required: false
+          schema: { type: integer, minimum: 0, default: 0 }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/S3UserList' }
+        "401": { description: Unauthorized, content: { application/json: { schema: { $ref: '#/components/schemas/status_401_unauthorized' }}}}
+        "403": { description: Forbidden,    content: { application/json: { schema: { $ref: '#/components/schemas/status_403_forbidden' }}}}
+        "500": { description: Internal Server Error, content: { application/json: { schema: { $ref: '#/components/schemas/status_500_internal_server_error' }}}}
+
+    post:
+      tags: [S3 User]
+      summary: Create or update an RGW user (upsert)
+      description: Mirrors radosgw-admin user create/modify with sensible defaults.
+      operationId: upsertS3User
+      security: [ { bearerAuth: [] } ]
+      parameters:
+        - $ref: '#/components/parameters/clusterParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateOrUpdateS3UserRequest' }
+      responses:
+        "200":
+          description: OK (created or updated)
+          content: { application/json: { schema: { $ref: '#/components/schemas/S3User' }}}
+        "400": { description: Bad Request, content: { application/json: { schema: { $ref: '#/components/schemas/status_400_bad_request' }}}}
+        "401": { description: Unauthorized, content: { application/json: { schema: { $ref: '#/components/schemas/status_401_unauthorized' }}}}
+        "403": { description: Forbidden,    content: { application/json: { schema: { $ref: '#/components/schemas/status_403_forbidden' }}}}
+        "500": { description: Internal Server Error, content: { application/json: { schema: { $ref: '#/components/schemas/status_500_internal_server_error' }}}}
+
+  /s3/user/{uid}:
+    get:
+      tags: [S3 User]
+      summary: Get RGW user
+      operationId: getS3User
+      security: [ { bearerAuth: [] } ]
+      parameters:
+        - $ref: '#/components/parameters/clusterParam'
+        - in: path
+          name: uid
+          required: true
+          schema: { type: string }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/S3User' }}}}
+        "404": { description: Not Found, content: { application/json: { schema: { $ref: '#/components/schemas/status_404_not_found' }}}}
+        "401": { description: Unauthorized, content: { application/json: { schema: { $ref: '#/components/schemas/status_401_unauthorized' }}}}
+        "403": { description: Forbidden,    content: { application/json: { schema: { $ref: '#/components/schemas/status_403_forbidden' }}}}
+        "500": { description: Internal Server Error, content: { application/json: { schema: { $ref: '#/components/schemas/status_500_internal_server_error' }}}}
+
+    delete:
+      tags: [S3 User]
+      summary: Delete RGW user
+      operationId: deleteS3User
+      security: [ { bearerAuth: [] } ]
+      parameters:
+        - $ref: '#/components/parameters/clusterParam'
+        - in: path
+          name: uid
+          required: true
+          schema: { type: string }
+        - in: query
+          name: purge_data
+          required: false
+          schema: { type: boolean, default: false }
+          description: Also purge buckets/objects owned by the user (dangerous)
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/status_200_ok_no_content' }}}}
+        "404": { description: Not Found, content: { application/json: { schema: { $ref: '#/components/schemas/status_404_not_found' }}}}
+        "400": { description: Bad Request, content: { application/json: { schema: { $ref: '#/components/schemas/status_400_bad_request' }}}}
+
+  /s3/user/{uid}/keys:
+    get:
+      tags: [S3 User]
+      summary: List S3 access keys for a user
+      operationId: listS3UserKeys
+      security: [ { bearerAuth: [] } ]
+      parameters:
+        - $ref: '#/components/parameters/clusterParam'
+        - in: path
+          name: uid
+          required: true
+          schema: { type: string }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { type: array, items: { $ref: '#/components/schemas/S3KeyPair' }}}}}
+        "404": { description: Not Found, content: { application/json: { schema: { $ref: '#/components/schemas/status_404_not_found' }}}}
+
+    post:
+      tags: [S3 User]
+      summary: Create or set an access key
+      description: If `access_key` and `secret_key` omitted, a new pair is generated.
+      operationId: createS3UserKey
+      security: [ { bearerAuth: [] } ]
+      parameters:
+        - $ref: '#/components/parameters/clusterParam'
+        - in: path
+          name: uid
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateS3KeyRequest' }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/S3KeyPair' }}}}
+        "404": { description: Not Found, content: { application/json: { schema: { $ref: '#/components/schemas/status_404_not_found' }}}}
+
+    delete:
+      tags: [S3 User]
+      summary: Delete an access key
+      operationId: deleteS3UserKey
+      security: [ { bearerAuth: [] } ]
+      parameters:
+        - $ref: '#/components/parameters/clusterParam'
+        - in: path
+          name: uid
+          required: true
+          schema: { type: string }
+        - in: query
+          name: access_key
+          required: true
+          schema: { type: string }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/status_200_ok_no_content' }}}}
+        "404": { description: Not Found, content: { application/json: { schema: { $ref: '#/components/schemas/status_404_not_found' }}}}
+
+  /s3/user/{uid}/quota:
+    get:
+      tags: [S3 User]
+      summary: Get user & bucket quota
+      operationId: getS3Quota
+      security: [ { bearerAuth: [] } ]
+      parameters:
+        - $ref: '#/components/parameters/clusterParam'
+        - in: path
+          name: uid
+          required: true
+          schema: { type: string }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/S3Quota' }}}}
+        "404": { description: Not Found, content: { application/json: { schema: { $ref: '#/components/schemas/status_404_not_found' }}}}
+
+    put:
+      tags: [S3 User]
+      summary: Set user and/or bucket quota
+      operationId: setS3Quota
+      security: [ { bearerAuth: [] } ]
+      parameters:
+        - $ref: '#/components/parameters/clusterParam'
+        - in: path
+          name: uid
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/S3QuotaRequest' }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/status_200_ok_no_content' }}}}
+        "400": { description: Bad Request, content: { application/json: { schema: { $ref: '#/components/schemas/status_400_bad_request' }}}}
+
+  # ---------- S3 BUCKETS ----------
+  /s3/bucket:
+    get:
+      tags: [S3 Bucket]
+      summary: List buckets (optionally by owner)
+      operationId: listS3Buckets
+      security: [ { bearerAuth: [] } ]
+      parameters:
+        - $ref: '#/components/parameters/clusterParam'
+        - in: query
+          name: uid
+          required: false
+          schema: { type: string }
+          description: If provided, returns buckets owned by this user only
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/S3BucketList' }}}}
+
+    post:
+      tags: [S3 Bucket]
+      summary: Create a bucket
+      operationId: createS3Bucket
+      security: [ { bearerAuth: [] } ]
+      parameters:
+        - $ref: '#/components/parameters/clusterParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateS3BucketRequest' }
+      responses:
+        "201": { description: Created, content: { application/json: { schema: { $ref: '#/components/schemas/S3Bucket' }}}}
+        "400": { description: Bad Request, content: { application/json: { schema: { $ref: '#/components/schemas/status_400_bad_request' }}}}
+
+  /s3/bucket/{bucket}:
+    get:
+      tags: [S3 Bucket]
+      summary: Get bucket stats/owner/placement
+      operationId: getS3Bucket
+      security: [ { bearerAuth: [] } ]
+      parameters:
+        - $ref: '#/components/parameters/clusterParam'
+        - in: path
+          name: bucket
+          required: true
+          schema: { type: string }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/S3Bucket' }}}}
+        "404": { description: Not Found, content: { application/json: { schema: { $ref: '#/components/schemas/status_404_not_found' }}}}
+
+    delete:
+      tags: [S3 Bucket]
+      summary: Delete a bucket
+      description: Optionally purge objects prior to deletion.
+      operationId: deleteS3Bucket
+      security: [ { bearerAuth: [] } ]
+      parameters:
+        - $ref: '#/components/parameters/clusterParam'
+        - in: path
+          name: bucket
+          required: true
+          schema: { type: string }
+        - in: query
+          name: purge_objects
+          required: false
+          schema: { type: boolean, default: false }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/status_200_ok_no_content' }}}}
+        "409":
+          description: Conflict (bucket not empty and purge not requested)
+          content: { application/json: { schema: { $ref: '#/components/schemas/status_400_bad_request' }}}
+
+  /s3/bucket/{bucket}/versioning:
+    put:
+      tags: [S3 Bucket]
+      summary: Enable/disable versioning
+      operationId: setS3BucketVersioning
+      security: [ { bearerAuth: [] } ]
+      parameters:
+        - $ref: '#/components/parameters/clusterParam'
+        - in: path
+          name: bucket
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/S3BucketVersioningRequest' }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/status_200_ok_no_content' }}}}
+
+  /s3/bucket/{bucket}/quota:
+    put:
+      tags: [S3 Bucket]
+      summary: Set bucket-level quota
+      operationId: setS3BucketQuota
+      security: [ { bearerAuth: [] } ]
+      parameters:
+        - $ref: '#/components/parameters/clusterParam'
+        - in: path
+          name: bucket
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/S3BucketQuotaRequest' }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/status_200_ok_no_content' }}}}
+
+  # ---------- POLICIES / ACL ----------
+  /s3/bucket/{bucket}/policy:
+    get:
+      tags: [S3 Policy]
+      summary: Get bucket policy (IAM JSON)
+      operationId: getS3BucketPolicy
+      security: [ { bearerAuth: [] } ]
+      parameters:
+        - $ref: '#/components/parameters/clusterParam'
+        - in: path
+          name: bucket
+          required: true
+          schema: { type: string }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/S3PolicyDocument' }}}}
+        "404": { description: Not Found, content: { application/json: { schema: { $ref: '#/components/schemas/status_404_not_found' }}}}
+
+    put:
+      tags: [S3 Policy]
+      summary: Set/replace bucket policy (IAM JSON)
+      operationId: putS3BucketPolicy
+      security: [ { bearerAuth: [] } ]
+      parameters:
+        - $ref: '#/components/parameters/clusterParam'
+        - in: path
+          name: bucket
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/S3PolicyDocument' }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/status_200_ok_no_content' }}}}
+        "400": { description: Bad policy document, content: { application/json: { schema: { $ref: '#/components/schemas/status_400_bad_request' }}}}
+
+    delete:
+      tags: [S3 Policy]
+      summary: Delete bucket policy
+      operationId: deleteS3BucketPolicy
+      security: [ { bearerAuth: [] } ]
+      parameters:
+        - $ref: '#/components/parameters/clusterParam'
+        - in: path
+          name: bucket
+          required: true
+          schema: { type: string }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/status_200_ok_no_content' }}}}
+
+  /s3/bucket/{bucket}/acl:
+    get:
+      tags: [S3 Policy]
+      summary: Get bucket ACL (Canned or XML)
+      operationId: getS3BucketAcl
+      security: [ { bearerAuth: [] } ]
+      parameters:
+        - $ref: '#/components/parameters/clusterParam'
+        - in: path
+          name: bucket
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/S3Acl' }
+            application/xml:
+              schema: { type: string }
+
+    put:
+      tags: [S3 Policy]
+      summary: Set bucket ACL (Canned or XML)
+      operationId: putS3BucketAcl
+      security: [ { bearerAuth: [] } ]
+      parameters:
+        - $ref: '#/components/parameters/clusterParam'
+        - in: path
+          name: bucket
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/S3Acl' }
+          application/xml:
+            schema: { type: string }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/status_200_ok_no_content' }}}}
+
 
   /version:
     get:
@@ -1344,3 +1742,180 @@ components:
         error:
           type: string
           nullable: true
+
+    # --------- S3 USERS ----------
+    S3UserList:
+      allOf:
+        - $ref: '#/components/schemas/status_200_ok_paginated'
+        - type: object
+          properties:
+            type: { type: string, example: s3_users }
+            data:
+              type: array
+              items: { $ref: '#/components/schemas/S3User' }
+
+    S3User:
+      type: object
+      properties:
+        uid:           { type: string, example: demo }
+        display_name:  { type: string, example: Demo User }
+        email:         { type: string, nullable: true, example: demo@example.org }
+        max_buckets:   { type: integer, example: 1000 }
+        suspended:     { type: boolean, default: false }
+        caps:
+          type: array
+          description: RGW admin caps (if enabled); not IAM
+          items:
+            type: object
+            properties:
+              type:  { type: string, example: buckets }
+              perm:  { type: string, example: "*"}
+        keys:
+          type: array
+          items: { $ref: '#/components/schemas/S3KeyPair' }
+        user_quota:    { $ref: '#/components/schemas/S3QuotaEntry' }
+        bucket_quota:  { $ref: '#/components/schemas/S3QuotaEntry' }
+        system:        { type: boolean, default: false }
+        op_mask:       { type: string, nullable: true }
+
+    CreateOrUpdateS3UserRequest:
+      type: object
+      required: [uid]
+      properties:
+        uid:          { type: string, example: project123 }
+        display_name: { type: string, example: "Project 123 Service Account" }
+        email:        { type: string, nullable: true }
+        suspended:    { type: boolean, default: false }
+        max_buckets:  { type: integer, default: 1000 }
+        system:       { type: boolean, default: false }
+        op_mask:      { type: string, nullable: true }
+        caps:
+          type: array
+          items:
+            type: object
+            properties:
+              type: { type: string, example: users }   # users|buckets|metadata|usage|zone
+              perm: { type: string, example: "*"}      # read|write|*
+        keys:
+          type: array
+          items: { $ref: '#/components/schemas/CreateS3KeyRequest' }
+          description: Optional explicit keypairs to set; omit to auto-generate none.
+
+    S3KeyPair:
+      type: object
+      properties:
+        user:        { type: string, example: project123 }
+        access_key:  { type: string, example: AKIA... }
+        secret_key:  { type: string, example: very-secret }
+        status:      { type: string, example: active }
+
+    CreateS3KeyRequest:
+      type: object
+      properties:
+        access_key:  { type: string, nullable: true }
+        secret_key:  { type: string, nullable: true }
+        generate:    { type: boolean, default: true }
+
+    S3Quota:
+      type: object
+      properties:
+        user_quota:   { $ref: '#/components/schemas/S3QuotaEntry' }
+        bucket_quota: { $ref: '#/components/schemas/S3QuotaEntry' }
+
+    S3QuotaEntry:
+      type: object
+      properties:
+        enabled:     { type: boolean, default: false }
+        max_size_kb: { type: integer, nullable: true, example: 104857600 }
+        max_objects: { type: integer, nullable: true, example: 1000000 }
+
+    S3QuotaRequest:
+      type: object
+      properties:
+        user_quota:   { $ref: '#/components/schemas/S3QuotaEntry' }
+        bucket_quota: { $ref: '#/components/schemas/S3QuotaEntry' }
+
+    # --------- S3 BUCKETS ----------
+    S3BucketList:
+      allOf:
+        - $ref: '#/components/schemas/status_200_ok_paginated'
+        - type: object
+          properties:
+            type: { type: string, example: s3_buckets }
+            data:
+              type: array
+              items:
+                type: object
+                properties:
+                  name:  { type: string, example: my-bucket }
+                  owner: { type: string, example: project123 }
+
+    S3Bucket:
+      type: object
+      properties:
+        name:
+          { type: string, example: my-bucket }
+        owner:
+          { type: string, example: project123 }
+        num_objects:
+          { type: integer, example: 42 }
+        size_kb:
+          { type: integer, example: 8192 }
+        placement_rule:
+          { type: string, nullable: true, example: default-placement }
+        zonegroup:     { type: string, nullable: true, example: us-east }
+        zone:          { type: string, nullable: true, example: us-east-1a }
+        versioning:    { type: string, enum: [Enabled, Suspended, Disabled], example: Disabled }
+
+    CreateS3BucketRequest:
+      type: object
+      required: [bucket, uid]
+      properties:
+        bucket:         { type: string, example: my-bucket }
+        uid:            { type: string, example: project123, description: Owner uid }
+        placement_rule: { type: string, nullable: true }
+        versioning:     { type: string, enum: [Enabled, Suspended, Disabled], default: Disabled }
+
+    S3BucketVersioningRequest:
+      type: object
+      required: [status]
+      properties:
+        status: { type: string, enum: [Enabled, Suspended, Disabled] }
+
+    S3BucketQuotaRequest:
+      type: object
+      properties:
+        enabled:     { type: boolean, default: true }
+        max_size_kb: { type: integer, nullable: true }
+        max_objects: { type: integer, nullable: true }
+
+    # --------- POLICIES / ACL ----------
+    S3PolicyDocument:
+      type: object
+      description: Standard S3-style IAM policy JSON for a bucket.
+      additionalProperties: true
+      example:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal: "*"
+            Action: [ "s3:GetObject" ]
+            Resource: "arn:aws:s3:::my-bucket/*"
+
+    S3Acl:
+      type: object
+      description: Canned ACL or parsed ACL structure.
+      properties:
+        canned:
+          type: string
+          nullable: true
+          description: One of private|public-read|public-read-write|authenticated-read
+          example: public-read
+        grants:
+          type: array
+          nullable: true
+          items:
+            type: object
+            properties:
+              grantee: { type: string, example: "uri:http://acs.amazonaws.com/groups/global/AllUsers" }
+              permission: { type: string, example: READ }

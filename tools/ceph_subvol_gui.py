@@ -21,6 +21,8 @@ NEW
 ---
 - Revoke caps: removes the MDS path clause for the selected volume from a user or all users in a project.
 - Works for grouped and ungrouped subvolumes (group=None).
+- Uses Reports API to load ACTIVE users/projects for the pickers.
+- Uses Core API ONLY to resolve project membership (members' bastion_login) when applying/revoking caps to a project.
 """
 
 from __future__ import annotations
@@ -28,12 +30,12 @@ from __future__ import annotations
 import datetime
 import os
 import json
-import traceback
-from typing import Optional, List, Dict, Any, Tuple
+from typing import Optional, List, Dict, Any, Tuple, Iterable
 
 # -------- Defaults (override in notebook or via env) --------
 DEFAULT_CEPH_API_BASE: Optional[str] = os.getenv("FABRIC_CEPH_API_BASE")
 DEFAULT_REPORTS_API_BASE: Optional[str] = os.getenv("FABRIC_REPORTS_API_BASE")
+DEFAULT_CORE_API_BASE: Optional[str] = os.getenv("FABRIC_CORE_API_BASE")
 DEFAULT_VERIFY_TLS: bool = os.getenv("FABRIC_VERIFY_TLS", "true").lower() in {"1", "true", "yes", "on"}
 DEFAULT_CEPHFS_VOLUME: str = os.getenv("FABRIC_CEPHFS_VOLUME", "cephfs")
 DEFAULT_CLUSTER: Optional[str] = os.getenv("FABRIC_CEPH_CLUSTER")
@@ -62,6 +64,13 @@ def _import_reports_client():
         except Exception as e2:
             return None, f"{e1!r}; {e2!r}"
 
+def _import_core_api():
+    try:
+        from core_api import CoreApi
+        return CoreApi, None
+    except Exception as e:
+        return None, repr(e)
+
 # -------- Helpers --------
 def _slugify_subvol_from_project(p: dict) -> str:
     import re
@@ -75,24 +84,13 @@ def _slugify_subvol_from_project(p: dict) -> str:
 def _bytes_from_gib(gib: int) -> int:
     return int(gib) * 1024**3
 
-from typing import Any, Dict, List, Iterable
-
 def _extract_users(rows: Any) -> List[Dict[str, Any]]:
     """
     Normalize and extract unique user dicts from an API-style response.
 
-    Accepts:
-      - dict with optional "data" key (list of rows)
-      - list/iterable of row dicts
-      - None
-
-    A "user" is any dict containing at least one of:
-      bastion_login, user_email, user_id
-
-    Deduplicates by (bastion_login || user_email || user_id), first occurrence wins.
-    Sorts by bastion_login, then user_email, then user_id (all case-insensitive).
+    Accepts dict/list/None. A "user" has at least one of: bastion_login, user_email, user_id.
+    Dedup by (bastion_login || user_email || user_id); sort by bastion_login, user_email, user_id.
     """
-    # 1) Normalize input
     if isinstance(rows, dict):
         rows = rows.get("data", [])
     if rows is None:
@@ -100,13 +98,11 @@ def _extract_users(rows: Any) -> List[Dict[str, Any]]:
     if not isinstance(rows, Iterable) or isinstance(rows, (str, bytes)):
         rows = [rows]
 
-    # 2) Filter valid user-like dicts
     candidates: List[Dict[str, Any]] = []
     for r in rows:
         if isinstance(r, dict) and ("bastion_login" in r or "user_email" in r or "user_id" in r):
             candidates.append(r)
 
-    # 3) Deduplicate by preferred key order
     seen = set()
     unique: List[Dict[str, Any]] = []
     for r in candidates:
@@ -115,7 +111,6 @@ def _extract_users(rows: Any) -> List[Dict[str, Any]]:
             seen.add(key)
             unique.append(r)
 
-    # 4) Sort by bastion_login -> user_email -> user_id (case-insensitive)
     def sort_key(d: Dict[str, Any]):
         bl = d.get("bastion_login")
         em = d.get("user_email")
@@ -132,31 +127,20 @@ def _extract_users(rows: Any) -> List[Dict[str, Any]]:
 def _extract_projects(rows: Any) -> List[Dict[str, Any]]:
     """
     Normalize and extract unique project dicts from an API-style response.
-
-    Accepts:
-      - dict with optional "data" key (list of rows)
-      - list/iterable of row dicts
-      - None
-
-    Keeps only items that are dicts containing "project_id".
-    Deduplicates by project_id (first occurrence wins).
-    Sorts by project_name (case-insensitive), falling back to project_id.
+    Keep only dicts with "project_id". Dedup by project_id. Sort by project_name (fallback id).
     """
-    # 1) Normalize input -> iterable of rows
     if isinstance(rows, dict):
         rows = rows.get("data", [])
     if rows is None:
         rows = []
     if not isinstance(rows, Iterable) or isinstance(rows, (str, bytes)):
-        rows = [rows]  # unexpected scalar: treat as single row
+        rows = [rows]
 
-    # 2) Filter valid project dicts
     candidates: List[Dict[str, Any]] = []
     for r in rows:
         if isinstance(r, dict) and "project_id" in r:
             candidates.append(r)
 
-    # 3) Deduplicate by project_id (first wins)
     seen: set = set()
     unique: List[Dict[str, Any]] = []
     for r in candidates:
@@ -165,14 +149,10 @@ def _extract_projects(rows: Any) -> List[Dict[str, Any]]:
             seen.add(pid)
             unique.append(r)
 
-    # 4) Sort by project_name (case-insensitive), fallback to project_id
     def sort_key(d: Dict[str, Any]) -> tuple:
         name = d.get("project_name")
         pid = d.get("project_id")
-        # ensure stable, comparable keys
-        name_key = (str(name).lower() if name is not None else "")
-        id_key = (str(pid) if pid is not None else "")
-        return (name_key, id_key)
+        return ((str(name).lower() if name is not None else ""), (str(pid) if pid is not None else ""))
 
     unique.sort(key=sort_key)
     return unique
@@ -187,13 +167,6 @@ def _project_label(p: Dict[str, Any]) -> str:
 
 # --- Keyring / caps parsing helpers (for revoke) ---
 def _extract_caps_by_entity_from_keyring_text(keyring_text: str) -> Dict[str, str]:
-    """
-    Parse blocks like:
-      caps mds = "allow rw fsname=FS path=/path, allow r fsname=FS path=/other"
-      caps mon = "allow r fsname=FS"
-      caps osd = "allow rw tag cephfs data=FS, allow rw tag cephfs metadata=FS"
-    Return dict: {"mds": "...", "mon": "...", "osd": "...", "mgr": "...?"}
-    """
     import re
     caps: Dict[str, str] = {}
     for ent in ("mds", "mon", "osd", "mgr"):
@@ -203,13 +176,8 @@ def _extract_caps_by_entity_from_keyring_text(keyring_text: str) -> Dict[str, st
     return caps
 
 def _remove_exact_path_clause_from_mds_caps(mds_caps: str, fs_name: str, target_path: str) -> Tuple[str, bool]:
-    """
-    Remove the clause that matches both fsname and path.
-    Returns (new_mds_caps, changed_bool).
-    """
     if not (mds_caps and fs_name and target_path):
         return mds_caps or "", False
-    # Split by commas (top-level clauses are comma-separated)
     parts = [p.strip() for p in mds_caps.split(",") if p.strip()]
     keep: List[str] = []
     changed = False
@@ -222,10 +190,7 @@ def _remove_exact_path_clause_from_mds_caps(mds_caps: str, fs_name: str, target_
     return (", ".join(keep), changed)
 
 def _deep_find_path(obj: Any) -> Optional[str]:
-    """
-    Robustly search for first 'path' key in nested dict/list.
-    Works with responses where get_subvolume_info returns a nested status wrapper.
-    """
+    """Search for first 'path' key in nested dict/list structures."""
     if isinstance(obj, dict):
         for k, v in obj.items():
             if k == "path" and isinstance(v, str):
@@ -247,10 +212,12 @@ def launch():
 
     CephClient, ceph_err = _import_ceph_client()
     ReportsClient, reports_err = _import_reports_client()
+    CoreApiClass, core_err = _import_core_api()
 
     # ---------- Shared connection widgets ----------
     ceph_url = W.Text(description="Ceph API", value=(DEFAULT_CEPH_API_BASE or ""), placeholder="https://mgr/api", layout=W.Layout(width="55%"))
     reports_url = W.Text(description="Reports API", value=(DEFAULT_REPORTS_API_BASE or ""), placeholder="https://reports/api", layout=W.Layout(width="55%"))
+    core_api_url = W.Text(description="Core API", value=(DEFAULT_CORE_API_BASE or ""), placeholder="https://uis.fabric-testbed.net", layout=W.Layout(width="55%"))
     token_file = W.Text(description="Token File", value=(DEFAULT_TOKEN_FILE or ""), placeholder="Path to JSON with id_token")
     verify = W.Checkbox(value=DEFAULT_VERIFY_TLS, description="Verify TLS")
     cluster_dd = W.Dropdown(description="Cluster", options=[], disabled=True, layout=W.Layout(width="25%"))
@@ -258,7 +225,6 @@ def launch():
     connect = W.Button(description="Connect", button_style="primary")
 
     # ---------- SUBVOLS & GROUPS TAB ----------
-    # Create/Resize controls
     scope = W.ToggleButtons(options=[("Per-User", "user"), ("Per-Project", "project")], description="Create for")
     project_dd = W.Dropdown(description="Project", options=[], disabled=True)
     user_dd = W.Dropdown(description="User", options=[], disabled=False)
@@ -285,7 +251,7 @@ def launch():
     info_all_btn = W.Button(description="Info (All→Selected)")
     delete_all_btn = W.Button(description="Delete (All→Selected)", button_style="danger")
 
-    # Apply / Revoke caps to users or project (by picking a subvol/group OR All Subvols)
+    # Apply / Revoke caps to users or project
     apply_header = W.HTML("<b>Permissions</b><br><small>Pick a volume via <i>Group/Subvol</i> or <i>All Subvols</i> below, then choose targets.</small>")
     apply_selection_lbl = W.HTML("<i>No volume selected yet — pick from Group/Subvol or All Subvols.</i>")
     apply_target = W.ToggleButtons(options=[("Single User", "user"), ("Entire Project", "project")], description="Target")
@@ -310,6 +276,7 @@ def launch():
     # ---------- State ----------
     ceph = None
     reports = None
+    core_api = None
     users_cache: List[Dict[str, Any]] = []
     projects_cache: List[Dict[str, Any]] = []
     cephx_users_cache: List[Dict[str, Any]] = []
@@ -447,7 +414,6 @@ def launch():
             all_subvols_sel.options = []; all_subvols_sel.disabled = True
             _log(f"Refresh all subvols failed: {e}")
 
-    # Find the group containing a subvol (for All Subvols actions or apply/revoke)
     def _find_group_for_subvol(subvol: str) -> Optional[str]:
         try:
             cl = (cluster_dd.value or "").strip()
@@ -466,11 +432,25 @@ def launch():
                     continue
         except Exception:
             return None
-        return None  # Unknown or truly ungrouped
+        return None
 
     # ---------- Connect ----------
     def _on_connect(_):
-        nonlocal ceph, reports
+        nonlocal ceph, reports, core_api
+
+        # Core API (for project membership lookups)
+        try:
+            if CoreApiClass and (core_api_url.value.strip() or DEFAULT_CORE_API_BASE):
+                core_api = CoreApiClass(core_api_host=(core_api_url.value.strip() or DEFAULT_CORE_API_BASE),
+                                        token_file=token_file.value.strip())
+                _log("Connected to Core API.")
+            else:
+                core_api = None
+                _log(f"Core API import/URL issue: {core_err}")
+        except Exception as e:
+            core_api = None
+            _log(f"Core API connect failed: {e}")
+
         # Reports
         try:
             if ReportsClient and (reports_url.value.strip() or DEFAULT_REPORTS_API_BASE):
@@ -505,7 +485,7 @@ def launch():
 
         _populate_lists()
         _set_scope()
-        _toggle_apply_target()  # initialize apply target UI
+        _toggle_apply_target()
         _log("Ready.")
 
     # ---------- Scope / param helpers ----------
@@ -668,7 +648,7 @@ def launch():
         try:
             svn = all_subvols_sel.value
             if not svn: raise ValueError("Pick a subvolume in 'All Subvols'.")
-            grp = _find_group_for_subvol(svn)  # try to resolve group (may be None)
+            grp = _find_group_for_subvol(svn)  # may be None
             res = _info_selected(grp, svn)
             with results: clear_output(); print(json.dumps(res, indent=2, sort_keys=True))
             _log(f"Info (all) OK: {svn} (group={grp})")
@@ -682,7 +662,7 @@ def launch():
         try:
             svn = all_subvols_sel.value
             if not svn: raise ValueError("Pick a subvolume in 'All Subvols'.")
-            grp = _find_group_for_subvol(svn)  # resolve group if any (can be None)
+            grp = _find_group_for_subvol(svn)
             res = _delete_selected(grp, svn)
             with results: clear_output(); print(json.dumps(res, indent=2, sort_keys=True))
             _log(f"Deleted (all): {svn} (group={grp})")
@@ -696,13 +676,10 @@ def launch():
             fs = (vol_name.value or "").strip()
             grp = groups_dd.value
             svn = subvols_dd.value
-
-            # If no selection in Group/Subvol, fall back to All Subvols
             if not svn:
                 svn = all_subvols_sel.value
                 if svn:
-                    grp = _find_group_for_subvol(svn)  # may be None for ungrouped subvols
-
+                    grp = _find_group_for_subvol(svn)
             if fs and svn:
                 grp_disp = grp if grp is not None else "∅ (no group)"
                 apply_selection_lbl.value = (
@@ -715,24 +692,16 @@ def launch():
             apply_selection_lbl.value = "<i>No volume selected yet — pick from Group/Subvol or All Subvols.</i>"
 
     def _current_apply_selection() -> Tuple[str, Optional[str], str]:
-        """
-        Returns (fs, group_name|None, subvol_name) from either Group/Subvol selectors
-        or All Subvols. If chosen from All Subvols, group is auto-resolved and may be None.
-        """
         fs = (vol_name.value or "").strip()
         if not fs:
             raise ValueError("FS Volume is empty.")
-
         grp = groups_dd.value
         svn = subvols_dd.value
-
         if not svn:
-            # Try All Subvols
             svn = all_subvols_sel.value
             if not svn:
                 raise ValueError("Pick a subvolume in Group/Subvol or All Subvols.")
-            grp = _find_group_for_subvol(svn)  # may be None for ungrouped
-
+            grp = _find_group_for_subvol(svn)
         return fs, grp, svn
 
     def _apply_caps_for_users(logins: List[str], fs: str, svn: str, grp: Optional[str], cl: str):
@@ -752,7 +721,7 @@ def launch():
                     cluster=cl,
                     user_entity=user_entity,
                     template_capabilities=tmpl_caps,
-                    contexts=[(fs, svn, grp)],   # group may be None (no-group subvol)
+                    contexts=[(fs, svn, grp)],
                     merge_strategy="multi",
                     dry_run=False,
                 )
@@ -769,24 +738,12 @@ def launch():
             print(f"Apply complete. Success: {ok}, Failed: {err}")
 
     def _overwrite_caps_for_entity(cl: str, user_entity: str, cap_map: Dict[str, str]):
-        """
-        PUT /cluster/user with {"user_entity":..., "capabilities":[{"entity":"mds","cap":"..."}, ...]}
-        If CephManagerClient has overwrite_user_caps(), use it; otherwise fall back to raw _request.
-        Skips empty components (especially 'mds').
-        """
         items = [{"entity": k, "cap": v} for k, v in cap_map.items() if isinstance(v, str) and v.strip()]
-        payload = {"user_entity": user_entity, "capabilities": items}
         if hasattr(ceph, "overwrite_user_caps"):
             return ceph.overwrite_user_caps(cluster=cl, user_entity=user_entity, capabilities=items)
-        # Fallback to internal request
-        return ceph._request("PUT", "/cluster/user", params={"cluster": cl}, json=payload)
+        return ceph._request("PUT", "/cluster/user", params={"cluster": cl}, json={"user_entity": user_entity, "capabilities": items})
 
     def _revoke_caps_for_users(logins: List[str], fs: str, svn: str, maybe_group: Optional[str], cl: str):
-        """
-        Resolves the subvol absolute path, removes the exact (fs,path) MDS clause from users' caps,
-        and writes the reduced caps back (without sending an empty 'mds').
-        """
-        # Resolve absolute path from get_subvolume_info
         try:
             info = ceph.get_subvolume_info(cluster=cl, vol_name=fs, subvol_name=svn, group_name=maybe_group)
             target_path = _deep_find_path(info)
@@ -801,7 +758,6 @@ def launch():
         for login in logins:
             user_entity = f"client.{login}"
             try:
-                # Export current keyring → parse caps
                 exp = ceph.export_users(cluster=cl, entities=[user_entity])
                 blob = ((exp or {}).get("clusters", {}).get(cl, {}) or {}).get(user_entity, "")
                 text = (blob if isinstance(blob, str) else str(blob)).replace("\\n", "\n")
@@ -814,7 +770,6 @@ def launch():
                     with results: print(f"SKIP {user_entity}: no matching clause")
                     continue
 
-                # Build final caps map (drop mds if empty)
                 final_caps: Dict[str, str] = {}
                 if new_mds.strip():
                     final_caps["mds"] = new_mds
@@ -835,9 +790,29 @@ def launch():
                 _log(f"FAIL revoke {user_entity}: {e}")
                 with results:
                     print(f"FAIL {user_entity}: {e}")
-
         with results:
             print(f"Revoke complete. Success: {ok}, Failed: {err}")
+
+    # ---- membership via Core API ONLY ----
+    def _core_project_member_logins(project_id: str) -> List[str]:
+        if core_api is None:
+            raise RuntimeError("Core API is not connected; cannot resolve project members.")
+        try:
+            project = core_api.get_project(project_id=project_id)
+            members = project.get("project_members", [])
+            people = []
+            for m in members:
+                uuid = m.get("uuid")
+                if uuid:
+                    try:
+                        people.append(core_api.get_person(uuid))
+                    except Exception as e:
+                        _log(f"get_person({uuid}) failed: {e}")
+            logins = [p.get("bastion_login") for p in people if p and p.get("bastion_login")]
+            return logins
+        except Exception as e:
+            _log(f"Core project membership fetch failed: {e}")
+            return []
 
     def _on_apply_caps(_):
         if ceph is None:
@@ -855,21 +830,12 @@ def launch():
                 if not login:
                     raise ValueError("Selected user has no bastion_login.")
                 _apply_caps_for_users([login], fs, svn, grp, cl)
-
-            else:  # project
+            else:
                 if apply_project_dd.value is None or apply_project_dd.value >= len(projects_cache):
                     raise ValueError("Pick a project.")
                 proj = projects_cache[apply_project_dd.value]
                 proj_id = proj.get("project_id")
-                try:
-                    query_start = datetime.datetime.now(datetime.timezone.utc)
-                    resp = reports.query_users(user_active=True, fetch_all=True, project_id=[proj_id],
-                                               end_time=query_start)
-                    data = (resp or {}).get("data", [])
-                except Exception as e:
-                    data = []
-                    _log(f"Reports members fetch failed: {e}")
-                logins = [r.get("bastion_login") for r in data or [] if r.get("bastion_login")]
+                logins = _core_project_member_logins(proj_id)
                 if not logins:
                     raise ValueError("No members with bastion_login found for project.")
                 _apply_caps_for_users(logins, fs, svn, grp, cl)
@@ -894,21 +860,12 @@ def launch():
                 if not login:
                     raise ValueError("Selected user has no bastion_login.")
                 _revoke_caps_for_users([login], fs, svn, grp, cl)
-
-            else:  # project
+            else:
                 if apply_project_dd.value is None or apply_project_dd.value >= len(projects_cache):
                     raise ValueError("Pick a project.")
                 proj = projects_cache[apply_project_dd.value]
                 proj_id = proj.get("project_id")
-                try:
-                    query_start = datetime.datetime.now(datetime.timezone.utc)
-                    resp = reports.query_users(user_active=True, fetch_all=True, project_id=[proj_id],
-                                               end_time=query_start)
-                    data = (resp or {}).get("data", [])
-                except Exception as e:
-                    data = []
-                    _log(f"Reports members fetch failed: {e}")
-                logins = [r.get("bastion_login") for r in data or [] if r.get("bastion_login")]
+                logins = _core_project_member_logins(proj_id)
                 if not logins:
                     raise ValueError("No members with bastion_login found for project.")
                 _revoke_caps_for_users(logins, fs, svn, grp, cl)
@@ -1010,7 +967,7 @@ def launch():
     refresh_all_btn.on_click(_refresh_all_subvols)
     info_all_btn.on_click(_on_info_all)
     delete_all_btn.on_click(_on_delete_all)
-    all_subvols_sel.observe(lambda ch: _update_apply_selection_badge(), names="value")  # keep badge in sync
+    all_subvols_sel.observe(lambda ch: _update_apply_selection_badge(), names="value")
 
     # Apply/Revoke caps
     def _toggle_apply_target(_=None):
@@ -1021,7 +978,7 @@ def launch():
     apply_target.observe(_toggle_apply_target, names="value")
     apply_btn.on_click(_on_apply_caps)
     revoke_btn.on_click(_on_revoke_caps)
-    _toggle_apply_target()  # initialize
+    _toggle_apply_target()
 
     # Users tab
     refresh_users_btn.on_click(_refresh_cephx_users)
@@ -1030,15 +987,14 @@ def launch():
     delete_users_btn.on_click(_on_delete_users)
 
     # ---------- Layout (Tabs) ----------
-    # Header / connection
     hdr = W.VBox([
         W.HTML("<h3>FABRIC CephFS Manager</h3>"),
         W.HBox([ceph_url, reports_url]),
+        W.HBox([core_api_url]),
         W.HBox([token_file, verify, cluster_dd, vol_name, connect]),
         W.HTML("<hr>")
     ])
 
-    # Tab 1: Subvolumes & Groups
     create_box = W.VBox([
         W.HTML("<b>Create / Resize</b>"),
         W.HBox([scope, project_dd, user_dd]),
@@ -1063,7 +1019,6 @@ def launch():
 
     tab_subvols = W.VBox([create_box, W.HTML("<hr>"), browse_box, W.HTML("<hr>"), apply_box])
 
-    # Tab 2: Users
     users_box = W.VBox([
         W.HTML("<b>CephX Users</b>"),
         W.HBox([users_filter, refresh_users_btn]),

@@ -586,5 +586,5 @@ class CephManagerClient:
         except ApiError as e:
             # Graceful hint for GUI
             if e.status == 404:
-                return {"status": 404, "message": "Group not found", "group_name": group_name}
+                return {"status": 404, "message": f"Group not found: {e}", "group_name": group_name}
             raise

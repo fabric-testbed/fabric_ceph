@@ -190,55 +190,37 @@ class CoreApi:
         if uuid is None:
             uuid = self.get_user_id()
 
-        projects = self.__get_user_projects_via_service(uuid=uuid)
+        all_projects = self.__get_user_projects_via_service(uuid=uuid)
 
+        # The service endpoint returns projects the user is a member of,
+        # so no need to re-check memberships — presence in the list implies membership.
         ret_val: List[dict] = []
         now = _dt.datetime.now(tz=_dt.timezone.utc)
 
-        for p in projects:
+        for p in all_projects:
+            # Filter by project_id or project_name if requested
+            if specific_id and p.get("uuid") != project_id:
+                continue
+            if specific_name and p.get("name") != project_name:
+                continue
+
             # Expiration check
             expires_on = p.get("expires_on")
             if expires_on:
                 try:
                     expires_dt = _parse_iso_utc(expires_on)
                 except Exception:
-                    # If we cannot parse, be conservative and keep it
                     expires_dt = None
 
                 if expires_dt and now > expires_dt:
-                    if not specific_id and not specific_name:
-                        # Skip expired in "all" results
-                        continue
-                    else:
-                        # Explicit request for an expired project → error
+                    if specific_id or specific_name:
                         raise CoreApiError(f"Project {p.get('name')} is expired!")
-
-            memberships = p.get("memberships") or {}
-            is_member = bool(
-                memberships.get("is_member") or memberships.get("is_creator") or memberships.get("is_owner")
-            )
-
-            if not is_member:
-                # If user has no effective membership, error for specific requests; skip for "all"
-                if specific_id or specific_name:
-                    raise CoreApiError(f"User is not a member of Project: {p.get('uuid')}")
-                else:
                     continue
 
-            project: Dict[str, Any] = {
-                "name": p.get("name"),
-                "uuid": p.get("uuid"),
-            }
-
-            # Include tags & memberships only for a specific project-id request (matches your original logic intent)
-            if specific_id:
-                project["tags"] = p.get("tags")
-                project["memberships"] = memberships
-
-            ret_val.append(project)
+            ret_val.append(p)
 
         if len(ret_val) == 0:
-            raise CoreApiError(f"User is not a member of Project: {project_id}:{project_name}")
+            raise CoreApiError(f"User is not a member of Project: {project_id}")
 
         return ret_val
 

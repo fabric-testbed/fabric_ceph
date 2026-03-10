@@ -59,6 +59,16 @@ def list_users(cluster):  # noqa: E501
     return rc.list_users(cluster)
 
 
+def list_project_members():  # noqa: E501
+    """List project members with bastion logins
+
+     # noqa: E501
+
+    :rtype: dict
+    """
+    return rc.list_project_members()
+
+
 def overwrite_user_caps(cluster, body):  # noqa: E501
     """Overwrite capabilities for an existing CephX user (non-templated)
 

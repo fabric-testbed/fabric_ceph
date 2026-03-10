@@ -14,6 +14,7 @@ from fabric_ceph.openapi_server.models import (
 )
 from fabric_ceph.openapi_server.models.export_users_request import ExportUsersRequest  # noqa: E501
 from fabric_ceph.response.cors_response import cors_401, cors_400, cors_500, cors_200
+from fabric_ceph.external_api.core_api import CoreApi
 from fabric_ceph.utils.dash_client import DashClient
 from fabric_ceph.utils.utils import cors_success_response, cors_error_response, authorize, normalize_kv_caps
 
@@ -273,6 +274,76 @@ def list_users(cluster):  # noqa: E501
     except Exception as e:
         log.exception(f"Failed processing CephX list request: {e}")
         return cors_error_response(error=e)
+
+def list_project_members():  # noqa: E501
+    """List project members with bastion logins.
+
+    Returns active members of the configured service project who have a bastion_login.
+    """
+    g = get_globals()
+    log = g.log
+    log.debug("Processing list project members request")
+
+    try:
+        fabric_token, is_operator, _ = authorize()
+        if not is_operator:
+            return cors_401(details=f"{fabric_token.uuid}/{fabric_token.email} is not authorized!")
+
+        cfg = g.config
+        project_id = cfg.runtime.service_project
+        if not project_id:
+            return cors_500(details="service_project not configured")
+
+        timeout = getattr(getattr(cfg, "core_api", object()), "timeout", 15.0)
+        core_api_token = cfg.core_api.token
+        core_api = CoreApi(core_api_host=cfg.core_api.host, token=core_api_token, timeout=timeout)
+
+        # Get all membership rows for the service project
+        rows = core_api.get_project_memberships(project_id=project_id)
+
+        # Filter active rows and deduplicate by people_uuid
+        people: Dict[str, set] = {}
+        for row in rows:
+            if row.get("removed_date"):
+                continue
+            uuid = row.get("people_uuid")
+            mtype = row.get("membership_type")
+            if uuid:
+                people.setdefault(uuid, set())
+                if mtype:
+                    people[uuid].add(mtype)
+
+        # Fetch user info for each unique person and collect bastion_login
+        members = []
+        for uuid, mtypes in people.items():
+            try:
+                user_info = core_api.get_user_info(uuid=uuid)
+                bastion_login = user_info.get("bastion_login")
+                if bastion_login:
+                    members.append({
+                        "uuid": uuid,
+                        "bastion_login": bastion_login,
+                        "membership_types": sorted(mtypes),
+                    })
+            except Exception as e:
+                log.warning(f"Failed to get user info for {uuid}: {e}")
+                continue
+
+        # Sort by bastion_login
+        members.sort(key=lambda m: m["bastion_login"].lower())
+
+        response = {
+            "data": members,
+            "size": len(members),
+            "status": 200,
+            "type": "project_members",
+        }
+        return cors_success_response(response_body=response)
+
+    except Exception as e:
+        log.exception(f"Failed processing list project members request: {e}")
+        return cors_error_response(error=e)
+
 
 def overwrite_user_caps(cluster, body):  # noqa: E501
     """Overwrite capabilities for an existing CephX user (non-templated)

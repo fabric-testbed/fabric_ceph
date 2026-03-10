@@ -947,6 +947,54 @@ paths:
       tags:
       - Cluster User
       x-openapi-router-controller: fabric_ceph.openapi_server.controllers.cluster_user_controller
+  /project/members:
+    get:
+      operationId: list_project_members
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        uuid:
+                          type: string
+                        bastion_login:
+                          type: string
+                        membership_types:
+                          type: array
+                          items:
+                            type: string
+                  size:
+                    type: integer
+                  status:
+                    type: integer
+                  type:
+                    type: string
+          description: List of project members with bastion logins
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/status_401_unauthorized"
+          description: Unauthorized
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/status_500_internal_server_error"
+          description: Internal Server Error
+      security:
+      - bearerAuth: []
+      summary: List project members with bastion logins
+      tags:
+      - Cluster User
+      x-openapi-router-controller: fabric_ceph.openapi_server.controllers.cluster_user_controller
   /s3/bucket:
     get:
       operationId: list_s3_buckets

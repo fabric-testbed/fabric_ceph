@@ -195,6 +195,24 @@ def export_users(cluster, body):  # noqa: E501
         log.exception(f"Failed processing CephX export request: {e}")
         return cors_error_response(error=e)
 
+# Prefixes that identify Ceph infrastructure / system users.
+# These should never be exposed to end users via the API.
+_SYSTEM_USER_PREFIXES = (
+    "mds.", "osd.", "mgr.",
+    "client.admin",
+    "client.bootstrap-",
+    "client.crash.",
+    "client.ceph-exporter.",
+    "client.rgw.",
+)
+
+
+def _is_system_user(raw: Dict[str, Any]) -> bool:
+    """Return True if the raw user dict represents a Ceph system/infrastructure entity."""
+    entity = raw.get("user_entity") or raw.get("entity") or raw.get("id") or ""
+    return entity.startswith(_SYSTEM_USER_PREFIXES)
+
+
 def _raw_user_to_ceph_user(raw: Dict[str, Any]) -> CephUser:
     # entity name
     user_entity = raw.get("user_entity") or raw.get("entity") or raw.get("id") or ""
@@ -244,7 +262,7 @@ def list_users(cluster):  # noqa: E501
 
         result = list_users_on_cluster(cfg=g.config, cluster=cluster)  # {"cluster": "...", "users": [...]}
         raw_users = result.get("users", [])
-        users = [_raw_user_to_ceph_user(u) for u in raw_users]
+        users = [_raw_user_to_ceph_user(u) for u in raw_users if not _is_system_user(u)]
 
         resp = Users()
         resp.data = users

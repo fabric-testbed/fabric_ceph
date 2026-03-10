@@ -145,7 +145,7 @@ class CoreApi:
         if uuid is None:
             uuid = self.get_user_id()
 
-        resp = self._req("GET", f"/people/{uuid}", params={"as_self": "true"})
+        resp = self._req("GET", f"/people/{uuid}")
         logging.debug(f"GET PEOPLE/{uuid} Response : {resp.json()}")
         results = resp.json().get("results") or []
         if not results:

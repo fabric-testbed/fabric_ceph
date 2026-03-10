@@ -1,3 +1,4 @@
+import json
 from typing import Dict, List, Any
 
 import connexion
@@ -13,7 +14,7 @@ from fabric_ceph.openapi_server.models import (
     ExportUsersResponse,
 )
 from fabric_ceph.openapi_server.models.export_users_request import ExportUsersRequest  # noqa: E501
-from fabric_ceph.response.cors_response import cors_401, cors_400, cors_500, cors_200
+from fabric_ceph.response.cors_response import cors_401, cors_400, cors_500, cors_200, cors_response
 from fabric_ceph.external_api.core_api import CoreApi
 from fabric_ceph.utils.dash_client import DashClient
 from fabric_ceph.utils.utils import cors_success_response, cors_error_response, authorize, normalize_kv_caps
@@ -332,13 +333,13 @@ def list_project_members():  # noqa: E501
         # Sort by bastion_login
         members.sort(key=lambda m: m["bastion_login"].lower())
 
-        response = {
+        body = json.dumps({
             "data": members,
             "size": len(members),
             "status": 200,
             "type": "project_members",
-        }
-        return cors_success_response(response_body=response)
+        })
+        return cors_response(req=connexion.request, status_code=200, body=body)
 
     except Exception as e:
         log.exception(f"Failed processing list project members request: {e}")

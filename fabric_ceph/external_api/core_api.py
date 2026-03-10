@@ -160,69 +160,50 @@ class CoreApi:
 
     # ------------- Projects -------------
 
-    def __get_user_projects_via_service(self, *, uuid: str) -> List[dict]:
+    def get_project_memberships(self, *, project_id: str) -> List[dict]:
         """
-        Return user's project memberships via the service endpoint
-        /core-api-metrics/events/projects-membership/{person_uuid}.
-        Accessible with a service token without requiring a user session.
+        Return all membership rows for a project via the service endpoint
+        /core-api-metrics/events/projects-membership/{project_uuid}.
+
+        Each row has: people_uuid, project_uuid, membership_type,
+                      added_by, added_date, removed_by, removed_date.
         """
-        resp = self._req("GET", f"/core-api-metrics/events/projects-membership/{uuid}")
+        resp = self._req("GET", f"/core-api-metrics/events/projects-membership/{project_id}")
         payload = resp.json()
-        logging.debug(f"GET projects-membership/{uuid} Response : {payload}")
-        results = payload.get("results") or []
-        if not results and isinstance(payload, list):
-            results = payload
-        return results
+        logging.debug(f"GET projects-membership/{project_id} Response : {payload}")
+        return payload.get("results") or []
 
-    def get_user_projects(self, project_name: str = "all", project_id: str = "all", uuid: str = None) -> List[dict]:
+    def get_person_memberships(self, *, person_uuid: str) -> List[dict]:
         """
-        Get user's projects:
-          - specific project_id
-          - by project_name
-          - or all (default)
+        Return all membership rows for a person via the service endpoint
+        /core-api-metrics/events/people-membership/{person_uuid}.
 
-        Filters out expired projects (unless a specific project is requested, in which case it raises).
-        Ensures the user has some membership (member/creator/owner) in returned projects.
+        Each row has: people_uuid, project_uuid, membership_type,
+                      added_by, added_date, removed_by, removed_date.
         """
-        specific_id = project_id is not None and project_id != "all"
-        specific_name = project_name is not None and project_name != "all"
+        resp = self._req("GET", f"/core-api-metrics/events/people-membership/{person_uuid}")
+        payload = resp.json()
+        logging.debug(f"GET people-membership/{person_uuid} Response : {payload}")
+        return payload.get("results") or []
 
-        if uuid is None:
-            uuid = self.get_user_id()
+    def check_user_membership(self, *, project_id: str, person_uuid: str) -> Dict[str, bool]:
+        """
+        Check a user's membership types for a specific project.
 
-        all_projects = self.__get_user_projects_via_service(uuid=uuid)
-
-        # The service endpoint returns projects the user is a member of,
-        # so no need to re-check memberships — presence in the list implies membership.
-        ret_val: List[dict] = []
-        now = _dt.datetime.now(tz=_dt.timezone.utc)
-
-        for p in all_projects:
-            # Filter by project_id or project_name if requested
-            if specific_id and p.get("uuid") != project_id:
-                continue
-            if specific_name and p.get("name") != project_name:
-                continue
-
-            # Expiration check
-            expires_on = p.get("expires_on")
-            if expires_on:
-                try:
-                    expires_dt = _parse_iso_utc(expires_on)
-                except Exception:
-                    expires_dt = None
-
-                if expires_dt and now > expires_dt:
-                    if specific_id or specific_name:
-                        raise CoreApiError(f"Project {p.get('name')} is expired!")
-                    continue
-
-            ret_val.append(p)
-
-        if len(ret_val) == 0:
-            raise CoreApiError(f"User is not a member of Project: {project_id}")
-
-        return ret_val
+        Returns dict with keys: is_member, is_owner, is_creator.
+        """
+        rows = self.get_project_memberships(project_id=project_id)
+        # Filter to active rows for this user (removed_date is null)
+        user_rows = [
+            r for r in rows
+            if r.get("people_uuid") == person_uuid and not r.get("removed_date")
+        ]
+        types = {r.get("membership_type") for r in user_rows}
+        return {
+            "is_member": "member" in types,
+            "is_owner": "owner" in types,
+            "is_creator": "creator" in types,
+        }
 
 
 if __name__ == "__main__":

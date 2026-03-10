@@ -72,9 +72,11 @@ def authorize() -> Tuple[FabricToken, bool, Optional[str]]:
     if not fabric_token or not fabric_token.uuid:
         raise TokenException("Token is missing required 'uuid' claim.")
 
-    # Core API client (optionally honor a configured timeout if you have one)
+    # Core API client — use the configured service token (not the user's FABRIC id_token,
+    # which is a CredentialManager-issued JWT that the Core API does not accept).
     timeout = getattr(getattr(globals_.config, "core_api", object()), "timeout", 15.0)
-    core_api = CoreApi(core_api_host=globals_.config.core_api.host, token=token, timeout=timeout)
+    core_api_token = globals_.config.core_api.token or token
+    core_api = CoreApi(core_api_host=globals_.config.core_api.host, token=core_api_token, timeout=timeout)
 
     # Fetch user info
     user_info = core_api.get_user_info(uuid=fabric_token.uuid) or {}

@@ -4,3 +4,4 @@ fabric_reports_client
 pandas
 matplotlib
 ipywidgets
+ipywidgets

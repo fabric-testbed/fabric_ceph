@@ -160,52 +160,19 @@ class CoreApi:
 
     # ------------- Projects -------------
 
-    def __get_user_project_by_id(self, *, project_id: str) -> List[dict]:
+    def __get_user_projects_via_service(self, *, uuid: str) -> List[dict]:
         """
-        Return project by ID. API typically returns a list under 'results'.
+        Return user's project memberships via the service endpoint
+        /core-api-metrics/events/projects-membership/{person_uuid}.
+        Accessible with a service token without requiring a user session.
         """
-        resp = self._req("GET", f"/projects/{project_id}")
-        logging.debug(f"GET Project/{project_id} Response : {resp.json()}")
-        return resp.json().get("results") or []
-
-    def __get_user_projects(self, *, project_name: Optional[str] = None, uuid: Optional[str] = None) -> List[dict]:
-        """
-        Return user's projects (optionally filtered by project_name).
-        Handles pagination robustly.
-        """
-        if uuid is None:
-            uuid = self.get_user_id()
-
-        result: List[dict] = []
-        offset = 0
-        limit = 50
-
-        while True:
-            params = {
-                "offset": offset,
-                "limit": limit,
-                "person_uuid": uuid,
-                "sort_by": "name",
-                "order_by": "asc",
-            }
-            if project_name:
-                params["search"] = project_name
-
-            resp = self._req("GET", "/projects", params=params)
-            payload = resp.json()
-            logging.debug(f"GET Projects Response (offset={offset}, limit={limit}): {payload}")
-
-            size = payload.get("size") or 0
-            total = payload.get("total") or 0
-            projects = payload.get("results") or []
-
-            result.extend(projects)
-
-            offset += size  # <-- FIX: advance by size
-            if offset >= total or size == 0:
-                break
-
-        return result
+        resp = self._req("GET", f"/core-api-metrics/events/projects-membership/{uuid}")
+        payload = resp.json()
+        logging.debug(f"GET projects-membership/{uuid} Response : {payload}")
+        results = payload.get("results") or []
+        if not results and isinstance(payload, list):
+            results = payload
+        return results
 
     def get_user_projects(self, project_name: str = "all", project_id: str = "all", uuid: str = None) -> List[dict]:
         """
@@ -220,12 +187,10 @@ class CoreApi:
         specific_id = project_id is not None and project_id != "all"
         specific_name = project_name is not None and project_name != "all"
 
-        if specific_id:
-            projects = self.__get_user_project_by_id(project_id=project_id)
-        elif specific_name:
-            projects = self.__get_user_projects(project_name=project_name, uuid=uuid)
-        else:
-            projects = self.__get_user_projects(uuid=uuid)
+        if uuid is None:
+            uuid = self.get_user_id()
+
+        projects = self.__get_user_projects_via_service(uuid=uuid)
 
         ret_val: List[dict] = []
         now = _dt.datetime.now(tz=_dt.timezone.utc)

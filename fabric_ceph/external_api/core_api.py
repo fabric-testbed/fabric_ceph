@@ -135,6 +135,8 @@ class CoreApi:
     def get_user_info(self, *, uuid: Optional[str] = None, email: Optional[str] = None) -> dict:
         """
         Return user object either by UUID, by email, or for the caller if neither is given.
+        Uses the service endpoint /core-api-metrics/people-details/{uuid} which is
+        accessible with a service token (no user session required).
         """
         if email is not None:
             info = self.get_user_info_by_email(email=email)
@@ -145,12 +147,16 @@ class CoreApi:
         if uuid is None:
             uuid = self.get_user_id()
 
-        resp = self._req("GET", f"/people/{uuid}")
-        logging.debug(f"GET PEOPLE/{uuid} Response : {resp.json()}")
-        results = resp.json().get("results") or []
-        if not results:
-            raise CoreApiError(f"No user found with uuid: {uuid}")
-        return results[0]
+        resp = self._req("GET", f"/core-api-metrics/people-details/{uuid}")
+        logging.debug(f"GET people-details/{uuid} Response : {resp.json()}")
+        payload = resp.json()
+        # Service endpoint may return {results: [...]} or a flat object
+        results = payload.get("results") or []
+        if results:
+            return results[0]
+        if not results and "uuid" in payload:
+            return payload
+        raise CoreApiError(f"No user found with uuid: {uuid}")
 
     # ------------- Projects -------------
 

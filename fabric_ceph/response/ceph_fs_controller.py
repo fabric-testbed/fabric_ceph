@@ -318,10 +318,20 @@ def list_subvolume_groups(cluster, vol_name, info=None):  # noqa: E501
         log.debug("list_subvolume_groups raw response for %s/%s (info=%s): %s",
                    cluster, vol_name, info_flag, groups)
 
+        # Normalize to list of group name strings (Dashboard may return objects)
+        normalized_groups = []
+        for g in (groups if isinstance(groups, list) else []):
+            if isinstance(g, str):
+                normalized_groups.append(g)
+            elif isinstance(g, dict):
+                normalized_groups.append(g.get("name", str(g)))
+            else:
+                normalized_groups.append(str(g))
+
         # Build response (paginated-style envelope)
         resp = SubvolumeGroupList()
         resp.type = "subvolume_groups"
-        resp.data = groups if isinstance(groups, list) else []
+        resp.data = normalized_groups
         resp.size = len(resp.data)
         resp.total = len(resp.data)
         resp.limit = len(resp.data)

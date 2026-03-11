@@ -314,6 +314,8 @@ def list_subvolume_groups(cluster, vol_name, info=None):  # noqa: E501
 
         # DashClient call
         groups = dc.list_subvolume_groups(vol_name, info=info_flag)
+        log.debug("list_subvolume_groups raw response for %s/%s (info=%s): %s",
+                   cluster, vol_name, info_flag, groups)
 
         # Build response (paginated-style envelope)
         resp = SubvolumeGroupList()
@@ -367,7 +369,11 @@ def list_subvolumes(cluster, vol_name, group_name=None, info=None):  # noqa: E50
         info_flag = bool(info) if info is not None else False
 
         # DashClient call
+        log.debug("list_subvolumes request: cluster=%s vol=%s group=%s info=%s",
+                   cluster, vol_name, group_name, info_flag)
         items = dc.list_subvolumes(vol_name, group_name=group_name, info=info_flag)
+        log.debug("list_subvolumes raw response (type=%s, len=%s): %s",
+                   type(items).__name__, len(items) if isinstance(items, list) else 'N/A', items)
 
         # Build response (paginated-style envelope)
         resp = SubvolumeList()
@@ -378,6 +384,7 @@ def list_subvolumes(cluster, vol_name, group_name=None, info=None):  # noqa: E50
         resp.limit = len(resp.data)
         resp.offset = 0
         resp.status = 200
+        log.debug("list_subvolumes final response: size=%s data=%s", resp.size, resp.data)
         return cors_success_response(response_body=resp)
 
     except Exception as e:

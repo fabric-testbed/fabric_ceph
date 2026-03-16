@@ -168,6 +168,22 @@ class CephFsMountBundle:
             'echo "Using cluster: $CLUSTER"',
             'echo "Using conf:    $CONF"',
             'echo "Mount root:    $MNT_BASE"',
+            "",
+            "# Install ceph-common if the mount helper is missing",
+            "if ! command -v mount.ceph &>/dev/null; then",
+            '  echo "Installing ceph-common ..."',
+            "  if command -v dnf &>/dev/null; then",
+            "    sudo dnf install -y ceph-common",
+            "  elif command -v yum &>/dev/null; then",
+            "    sudo yum install -y ceph-common",
+            "  elif command -v apt-get &>/dev/null; then",
+            "    sudo apt-get update -qq && sudo apt-get install -y -qq ceph-common",
+            "  else",
+            '    echo "ERROR: cannot install ceph-common — unsupported package manager"',
+            "    exit 1",
+            "  fi",
+            "fi",
+            "",
             'sudo mkdir -p "$MNT_BASE/$CLUSTER/$USER"',
             "",
         ]
@@ -178,10 +194,27 @@ class CephFsMountBundle:
             lines += [
                 f'echo "Mounting fs={fsname} path={path} -> {mnt}"',
                 f'sudo mkdir -p {mnt}',
+                "set +e",
                 (
                     'sudo mount -t ceph ":' + path + f'" {mnt} '
-                    f'-o name="$CLIENT",secretfile="$SECRET",conf="$CONF",fs="{fsname}",_netdev,noatime'
+                    f'-o name="$CLIENT",secretfile="$SECRET",conf="$CONF",fs="{fsname}",_netdev,noatime 2>/dev/null'
                 ),
+                "rc=$?",
+                "set -e",
+                'if [[ $rc -ne 0 ]]; then',
+                f'  echo "fs= mount failed (rc=$rc). Retrying with mds_namespace={fsname} ..."',
+                "  set +e",
+                (
+                    '  sudo mount -t ceph ":' + path + f'" {mnt} '
+                    f'-o name="$CLIENT",secretfile="$SECRET",conf="$CONF",mds_namespace="{fsname}",_netdev,noatime'
+                ),
+                "  rc=$?",
+                "  set -e",
+                "fi",
+                'if [[ $rc -ne 0 ]]; then',
+                f'  echo "ERROR: mount failed with rc=$rc for {mnt}"',
+                "  exit $rc",
+                "fi",
                 "",
             ]
 

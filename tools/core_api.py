@@ -182,6 +182,7 @@ class CoreApi:
             "Accept": "application/json",
             "Content-Type": "application/json",
         }
+        self.cookies = {"fabric-service": token}
 
     # ------------- Low-level helpers -------------
 
@@ -195,6 +196,7 @@ class CoreApi:
                 method=method.upper(),
                 url=url,
                 headers=self.headers,
+                cookies=self.cookies,
                 params=params,
                 json=json_body,
                 timeout=self.timeout,
@@ -547,6 +549,29 @@ class CoreApi:
         if not results:
             raise CoreApiError(f"No person details found for id: {person_uuid}")
         return results[0]
+
+    def add_members_to_project(
+        self, project_uuid: str, person_uuids: List[str]
+    ) -> None:
+        """
+        Add one or more people to a project as members.
+
+        Uses ``PATCH /projects/{uuid}/project-members?operation=add``.
+
+        :param project_uuid: UUID of the target project.
+        :param person_uuids: List of person UUIDs to add.
+        :raises CoreApiError: On HTTP or validation errors.
+        """
+        if not project_uuid:
+            raise CoreApiError("project_uuid must be provided.")
+        if not person_uuids:
+            raise CoreApiError("person_uuids must be a non-empty list.")
+        self._request(
+            "PATCH",
+            f"/projects/{project_uuid}/project-members",
+            params={"operation": "add"},
+            json_body={"project_members": person_uuids},
+        )
 
 if __name__ == "__main__":
     # Example usage with a token file:

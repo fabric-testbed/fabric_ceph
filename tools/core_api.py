@@ -459,10 +459,31 @@ class CoreApi:
             if size == 0 or (total is not None and offset >= total):
                 break
 
+    @staticmethod
+    def _is_active(person: dict) -> bool:
+        """
+        Determine whether a person record indicates an active user.
+
+        The list endpoint only returns (uuid, name, email), so 'active' may
+        not be present.  For detail records the check order is:
+
+        1. ``active`` field is truthy  → active
+        2. ``roles`` list contains a role named ``fabric-active-users`` → active
+        3. Otherwise → not active
+        """
+        if person.get("active"):
+            return True
+        for role in person.get("roles") or []:
+            if isinstance(role, dict) and role.get("name") == "fabric-active-users":
+                return True
+            if isinstance(role, str) and role == "fabric-active-users":
+                return True
+        return False
+
     def collect_people(
         self,
         *,
-        active: Optional[bool] = None,  # if backend doesn't provide status, optional client-side filter
+        active: Optional[bool] = None,
         # server-side passthrough
         search: Optional[str] = None,
         exact_match: Optional[bool] = None,
@@ -473,11 +494,11 @@ class CoreApi:
     ) -> List[dict]:
         """
         Fetch ALL pages of /people and return a list, with optional client-side filters.
-        - email_equals: exact email compare after aggregation
-        - active: if True returns only active; if False only inactive; if None no client-side filter.
-                  This relies on a boolean-like field such as 'is_active' if present, and otherwise
-                  falls back to 'status'=='active' string check (if present). If neither exists,
-                  no active filtering is applied.
+
+        Args:
+            active: if True returns only active; if False only inactive; if None no filter.
+                    Active is determined by the ``active`` field or by having the
+                    ``fabric-active-users`` role.
         """
         people: List[dict] = []
         for person in self.iter_people(
@@ -490,11 +511,12 @@ class CoreApi:
         ):
             people.append(person)
 
-        # Client-side active filtering
-        if active:
-            return [p for p in people if p.get("active")]
-        else:
+        if active is None:
             return people
+        if active:
+            return [p for p in people if self._is_active(p)]
+        else:
+            return [p for p in people if not self._is_active(p)]
 
     def get_person(self, person_uuid: str) -> Dict[str, Any]:
         """
@@ -508,6 +530,22 @@ class CoreApi:
         results = payload.get("results") or []
         if not results:
             raise CoreApiError(f"No person found for id: {person_uuid}")
+        return results[0]
+
+    def get_person_details(self, person_uuid: str) -> Dict[str, Any]:
+        """
+        Fetch enriched person record from ``/core-api-metrics/people-details/{uuid}``.
+
+        This endpoint returns ``active`` (bool), ``bastion_login``, ``last_updated``,
+        ``roles``, and other fields not available on the basic ``/people/{uuid}`` endpoint.
+        """
+        if not person_uuid:
+            raise CoreApiError("person_uuid must be provided.")
+        resp = self._request("GET", f"/core-api-metrics/people-details/{person_uuid}")
+        payload = resp.json()
+        results = payload.get("results") or []
+        if not results:
+            raise CoreApiError(f"No person details found for id: {person_uuid}")
         return results[0]
 
 if __name__ == "__main__":

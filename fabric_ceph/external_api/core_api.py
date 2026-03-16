@@ -135,6 +135,8 @@ class CoreApi:
     def get_user_info(self, *, uuid: Optional[str] = None, email: Optional[str] = None) -> dict:
         """
         Return user object either by UUID, by email, or for the caller if neither is given.
+        Uses the service endpoint /core-api-metrics/people-details/{uuid} which is
+        accessible with a service token (no user session required).
         """
         if email is not None:
             info = self.get_user_info_by_email(email=email)
@@ -145,131 +147,63 @@ class CoreApi:
         if uuid is None:
             uuid = self.get_user_id()
 
-        resp = self._req("GET", f"/people/{uuid}", params={"as_self": "true"})
-        logging.debug(f"GET PEOPLE/{uuid} Response : {resp.json()}")
-        results = resp.json().get("results") or []
-        if not results:
-            raise CoreApiError(f"No user found with uuid: {uuid}")
-        return results[0]
+        resp = self._req("GET", f"/core-api-metrics/people-details/{uuid}")
+        logging.debug(f"GET people-details/{uuid} Response : {resp.json()}")
+        payload = resp.json()
+        # Service endpoint may return {results: [...]} or a flat object
+        results = payload.get("results") or []
+        if results:
+            return results[0]
+        if not results and "uuid" in payload:
+            return payload
+        raise CoreApiError(f"No user found with uuid: {uuid}")
 
     # ------------- Projects -------------
 
-    def __get_user_project_by_id(self, *, project_id: str) -> List[dict]:
+    def get_project_memberships(self, *, project_id: str) -> List[dict]:
         """
-        Return project by ID. API typically returns a list under 'results'.
+        Return all membership rows for a project via the service endpoint
+        /core-api-metrics/events/projects-membership/{project_uuid}.
+
+        Each row has: people_uuid, project_uuid, membership_type,
+                      added_by, added_date, removed_by, removed_date.
         """
-        resp = self._req("GET", f"/projects/{project_id}")
-        logging.debug(f"GET Project/{project_id} Response : {resp.json()}")
-        return resp.json().get("results") or []
+        resp = self._req("GET", f"/core-api-metrics/events/projects-membership/{project_id}")
+        payload = resp.json()
+        logging.debug(f"GET projects-membership/{project_id} Response : {payload}")
+        return payload.get("results") or []
 
-    def __get_user_projects(self, *, project_name: Optional[str] = None, uuid: Optional[str] = None) -> List[dict]:
+    def get_person_memberships(self, *, person_uuid: str) -> List[dict]:
         """
-        Return user's projects (optionally filtered by project_name).
-        Handles pagination robustly.
+        Return all membership rows for a person via the service endpoint
+        /core-api-metrics/events/people-membership/{person_uuid}.
+
+        Each row has: people_uuid, project_uuid, membership_type,
+                      added_by, added_date, removed_by, removed_date.
         """
-        if uuid is None:
-            uuid = self.get_user_id()
+        resp = self._req("GET", f"/core-api-metrics/events/people-membership/{person_uuid}")
+        payload = resp.json()
+        logging.debug(f"GET people-membership/{person_uuid} Response : {payload}")
+        return payload.get("results") or []
 
-        result: List[dict] = []
-        offset = 0
-        limit = 50
-
-        while True:
-            params = {
-                "offset": offset,
-                "limit": limit,
-                "person_uuid": uuid,
-                "sort_by": "name",
-                "order_by": "asc",
-            }
-            if project_name:
-                params["search"] = project_name
-
-            resp = self._req("GET", "/projects", params=params)
-            payload = resp.json()
-            logging.debug(f"GET Projects Response (offset={offset}, limit={limit}): {payload}")
-
-            size = payload.get("size") or 0
-            total = payload.get("total") or 0
-            projects = payload.get("results") or []
-
-            result.extend(projects)
-
-            offset += size  # <-- FIX: advance by size
-            if offset >= total or size == 0:
-                break
-
-        return result
-
-    def get_user_projects(self, project_name: str = "all", project_id: str = "all", uuid: str = None) -> List[dict]:
+    def check_user_membership(self, *, project_id: str, person_uuid: str) -> Dict[str, bool]:
         """
-        Get user's projects:
-          - specific project_id
-          - by project_name
-          - or all (default)
+        Check a user's membership types for a specific project.
 
-        Filters out expired projects (unless a specific project is requested, in which case it raises).
-        Ensures the user has some membership (member/creator/owner) in returned projects.
+        Returns dict with keys: is_member, is_owner, is_creator.
         """
-        specific_id = project_id is not None and project_id != "all"
-        specific_name = project_name is not None and project_name != "all"
-
-        if specific_id:
-            projects = self.__get_user_project_by_id(project_id=project_id)
-        elif specific_name:
-            projects = self.__get_user_projects(project_name=project_name, uuid=uuid)
-        else:
-            projects = self.__get_user_projects(uuid=uuid)
-
-        ret_val: List[dict] = []
-        now = _dt.datetime.now(tz=_dt.timezone.utc)
-
-        for p in projects:
-            # Expiration check
-            expires_on = p.get("expires_on")
-            if expires_on:
-                try:
-                    expires_dt = _parse_iso_utc(expires_on)
-                except Exception:
-                    # If we cannot parse, be conservative and keep it
-                    expires_dt = None
-
-                if expires_dt and now > expires_dt:
-                    if not specific_id and not specific_name:
-                        # Skip expired in "all" results
-                        continue
-                    else:
-                        # Explicit request for an expired project → error
-                        raise CoreApiError(f"Project {p.get('name')} is expired!")
-
-            memberships = p.get("memberships") or {}
-            is_member = bool(
-                memberships.get("is_member") or memberships.get("is_creator") or memberships.get("is_owner")
-            )
-
-            if not is_member:
-                # If user has no effective membership, error for specific requests; skip for "all"
-                if specific_id or specific_name:
-                    raise CoreApiError(f"User is not a member of Project: {p.get('uuid')}")
-                else:
-                    continue
-
-            project: Dict[str, Any] = {
-                "name": p.get("name"),
-                "uuid": p.get("uuid"),
-            }
-
-            # Include tags & memberships only for a specific project-id request (matches your original logic intent)
-            if specific_id:
-                project["tags"] = p.get("tags")
-                project["memberships"] = memberships
-
-            ret_val.append(project)
-
-        if len(ret_val) == 0:
-            raise CoreApiError(f"User is not a member of Project: {project_id}:{project_name}")
-
-        return ret_val
+        rows = self.get_project_memberships(project_id=project_id)
+        # Filter to active rows for this user (removed_date is null)
+        user_rows = [
+            r for r in rows
+            if r.get("people_uuid") == person_uuid and not r.get("removed_date")
+        ]
+        types = {r.get("membership_type") for r in user_rows}
+        return {
+            "is_member": "member" in types,
+            "is_owner": "owner" in types,
+            "is_creator": "creator" in types,
+        }
 
 
 if __name__ == "__main__":

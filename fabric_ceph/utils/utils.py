@@ -72,9 +72,11 @@ def authorize() -> Tuple[FabricToken, bool, Optional[str]]:
     if not fabric_token or not fabric_token.uuid:
         raise TokenException("Token is missing required 'uuid' claim.")
 
-    # Core API client (optionally honor a configured timeout if you have one)
+    # Core API client — use the configured service token (not the user's FABRIC id_token,
+    # which is a CredentialManager-issued JWT that the Core API does not accept).
     timeout = getattr(getattr(globals_.config, "core_api", object()), "timeout", 15.0)
-    core_api = CoreApi(core_api_host=globals_.config.core_api.host, token=token, timeout=timeout)
+    core_api_token = globals_.config.core_api.token or token
+    core_api = CoreApi(core_api_host=globals_.config.core_api.host, token=core_api_token, timeout=timeout)
 
     # Fetch user info
     user_info = core_api.get_user_info(uuid=fabric_token.uuid) or {}
@@ -84,15 +86,16 @@ def authorize() -> Tuple[FabricToken, bool, Optional[str]]:
     service_project_id = globals_.config.runtime.service_project
     is_owner = False
     try:
-        # get_user_projects returns tags/memberships when a specific project_id is requested
-        projects = core_api.get_user_projects(project_id=service_project_id, uuid=fabric_token.uuid) or []
-        svc_proj = next((p for p in projects if p.get("uuid") == service_project_id), projects[0] if projects else None)
-        if svc_proj:
-            memberships = svc_proj.get("memberships") or {}
-            is_owner = bool(memberships.get("is_owner", False))
+        memberships = core_api.check_user_membership(
+            project_id=service_project_id, person_uuid=fabric_token.uuid
+        )
+        if not memberships.get("is_member"):
+            raise CephException(
+                f"User is not a member of the service project: {service_project_id}",
+                http_error_code=UNAUTHORIZED,
+            )
+        is_owner = memberships.get("is_owner", False)
     except CoreApiError as e:
-        # If the user isn't in the service project or the project is expired,
-        # CoreApi may raise; treat as not owner but proceed with token and bastion_login.
         raise CephException(str(e), http_error_code=UNAUTHORIZED)
 
     return fabric_token, is_owner, bastion_login

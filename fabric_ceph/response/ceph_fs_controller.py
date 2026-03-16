@@ -9,6 +9,7 @@ from fabric_ceph.openapi_server.models import (
     Status200OkNoContentData,
     Status200OkNoContent, SubvolumeGroupList, SubvolumeList,
 )
+from fabric_ceph.openapi_server.models.subvolume_list_all_of_data import SubvolumeListAllOfData
 from fabric_ceph.openapi_server.models.subvolume_create_or_resize_request import (
     SubvolumeCreateOrResizeRequest,  # noqa: E501
 )
@@ -314,11 +315,23 @@ def list_subvolume_groups(cluster, vol_name, info=None):  # noqa: E501
 
         # DashClient call
         groups = dc.list_subvolume_groups(vol_name, info=info_flag)
+        log.debug("list_subvolume_groups raw response for %s/%s (info=%s): %s",
+                   cluster, vol_name, info_flag, groups)
+
+        # Normalize to list of group name strings (Dashboard may return objects)
+        normalized_groups = []
+        for g in (groups if isinstance(groups, list) else []):
+            if isinstance(g, str):
+                normalized_groups.append(g)
+            elif isinstance(g, dict):
+                normalized_groups.append(g.get("name", str(g)))
+            else:
+                normalized_groups.append(str(g))
 
         # Build response (paginated-style envelope)
         resp = SubvolumeGroupList()
         resp.type = "subvolume_groups"
-        resp.data = groups if isinstance(groups, list) else []
+        resp.data = normalized_groups
         resp.size = len(resp.data)
         resp.total = len(resp.data)
         resp.limit = len(resp.data)
@@ -367,17 +380,41 @@ def list_subvolumes(cluster, vol_name, group_name=None, info=None):  # noqa: E50
         info_flag = bool(info) if info is not None else False
 
         # DashClient call
+        log.debug("list_subvolumes request: cluster=%s vol=%s group=%s info=%s",
+                   cluster, vol_name, group_name, info_flag)
         items = dc.list_subvolumes(vol_name, group_name=group_name, info=info_flag)
+        log.debug("list_subvolumes raw response (type=%s, len=%s): %s",
+                   type(items).__name__, len(items) if isinstance(items, list) else 'N/A', items)
+
+        # Normalize: Ceph Dashboard nests details under an "info" key when info=true.
+        # Flatten into SubvolumeListAllOfData-compatible dicts.
+        normalized = []
+        for item in (items if isinstance(items, list) else []):
+            if isinstance(item, str):
+                normalized.append(SubvolumeListAllOfData(name=item))
+            elif isinstance(item, dict):
+                info = item.get("info") or {}
+                normalized.append(SubvolumeListAllOfData(
+                    name=item.get("name", ""),
+                    group_name=group_name,
+                    path=info.get("path") or item.get("path"),
+                    bytes_quota=info.get("bytes_quota") if info.get("bytes_quota") is not None else item.get("bytes_quota"),
+                    bytes_used=info.get("bytes_used") if info.get("bytes_used") is not None else item.get("bytes_used"),
+                    state=info.get("state") or item.get("state"),
+                ))
+            else:
+                normalized.append(item)
 
         # Build response (paginated-style envelope)
         resp = SubvolumeList()
         resp.type = "subvolumes"
-        resp.data = items if isinstance(items, list) else []
+        resp.data = normalized
         resp.size = len(resp.data)
         resp.total = len(resp.data)
         resp.limit = len(resp.data)
         resp.offset = 0
         resp.status = 200
+        log.debug("list_subvolumes final response: size=%s", resp.size)
         return cors_success_response(response_body=resp)
 
     except Exception as e:

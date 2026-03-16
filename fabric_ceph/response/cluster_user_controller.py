@@ -1,3 +1,4 @@
+import json
 from typing import Dict, List, Any
 
 import connexion
@@ -13,7 +14,8 @@ from fabric_ceph.openapi_server.models import (
     ExportUsersResponse,
 )
 from fabric_ceph.openapi_server.models.export_users_request import ExportUsersRequest  # noqa: E501
-from fabric_ceph.response.cors_response import cors_401, cors_400, cors_500, cors_200
+from fabric_ceph.response.cors_response import cors_401, cors_400, cors_500, cors_200, cors_response
+from fabric_ceph.external_api.core_api import CoreApi
 from fabric_ceph.utils.dash_client import DashClient
 from fabric_ceph.utils.utils import cors_success_response, cors_error_response, authorize, normalize_kv_caps
 
@@ -195,6 +197,24 @@ def export_users(cluster, body):  # noqa: E501
         log.exception(f"Failed processing CephX export request: {e}")
         return cors_error_response(error=e)
 
+# Prefixes that identify Ceph infrastructure / system users.
+# These should never be exposed to end users via the API.
+_SYSTEM_USER_PREFIXES = (
+    "mds.", "osd.", "mgr.",
+    "client.admin",
+    "client.bootstrap-",
+    "client.crash.",
+    "client.ceph-exporter.",
+    "client.rgw.",
+)
+
+
+def _is_system_user(raw: Dict[str, Any]) -> bool:
+    """Return True if the raw user dict represents a Ceph system/infrastructure entity."""
+    entity = raw.get("user_entity") or raw.get("entity") or raw.get("id") or ""
+    return entity.startswith(_SYSTEM_USER_PREFIXES)
+
+
 def _raw_user_to_ceph_user(raw: Dict[str, Any]) -> CephUser:
     # entity name
     user_entity = raw.get("user_entity") or raw.get("entity") or raw.get("id") or ""
@@ -244,7 +264,7 @@ def list_users(cluster):  # noqa: E501
 
         result = list_users_on_cluster(cfg=g.config, cluster=cluster)  # {"cluster": "...", "users": [...]}
         raw_users = result.get("users", [])
-        users = [_raw_user_to_ceph_user(u) for u in raw_users]
+        users = [_raw_user_to_ceph_user(u) for u in raw_users if not _is_system_user(u)]
 
         resp = Users()
         resp.data = users
@@ -255,6 +275,76 @@ def list_users(cluster):  # noqa: E501
     except Exception as e:
         log.exception(f"Failed processing CephX list request: {e}")
         return cors_error_response(error=e)
+
+def list_project_members():  # noqa: E501
+    """List project members with bastion logins.
+
+    Returns active members of the configured service project who have a bastion_login.
+    """
+    g = get_globals()
+    log = g.log
+    log.debug("Processing list project members request")
+
+    try:
+        fabric_token, is_operator, _ = authorize()
+        if not is_operator:
+            return cors_401(details=f"{fabric_token.uuid}/{fabric_token.email} is not authorized!")
+
+        cfg = g.config
+        project_id = cfg.runtime.service_project
+        if not project_id:
+            return cors_500(details="service_project not configured")
+
+        timeout = getattr(getattr(cfg, "core_api", object()), "timeout", 15.0)
+        core_api_token = cfg.core_api.token
+        core_api = CoreApi(core_api_host=cfg.core_api.host, token=core_api_token, timeout=timeout)
+
+        # Get all membership rows for the service project
+        rows = core_api.get_project_memberships(project_id=project_id)
+
+        # Filter active rows and deduplicate by people_uuid
+        people: Dict[str, set] = {}
+        for row in rows:
+            if row.get("removed_date"):
+                continue
+            uuid = row.get("people_uuid")
+            mtype = row.get("membership_type")
+            if uuid:
+                people.setdefault(uuid, set())
+                if mtype:
+                    people[uuid].add(mtype)
+
+        # Fetch user info for each unique person and collect bastion_login
+        members = []
+        for uuid, mtypes in people.items():
+            try:
+                user_info = core_api.get_user_info(uuid=uuid)
+                bastion_login = user_info.get("bastion_login")
+                if bastion_login:
+                    members.append({
+                        "uuid": uuid,
+                        "bastion_login": bastion_login,
+                        "membership_types": sorted(mtypes),
+                    })
+            except Exception as e:
+                log.warning(f"Failed to get user info for {uuid}: {e}")
+                continue
+
+        # Sort by bastion_login
+        members.sort(key=lambda m: m["bastion_login"].lower())
+
+        body = json.dumps({
+            "data": members,
+            "size": len(members),
+            "status": 200,
+            "type": "project_members",
+        })
+        return cors_response(req=connexion.request, status_code=200, body=body)
+
+    except Exception as e:
+        log.exception(f"Failed processing list project members request: {e}")
+        return cors_error_response(error=e)
+
 
 def overwrite_user_caps(cluster, body):  # noqa: E501
     """Overwrite capabilities for an existing CephX user (non-templated)

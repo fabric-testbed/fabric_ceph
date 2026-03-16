@@ -150,6 +150,8 @@ def ensure_subvolume_on_cluster(
         if spath:
             paths[cluster] = spath
 
+        logger.info("Subvolume '%s' on cluster '%s' created on source '%s'", fs_name, cluster, spath)
+
     except Exception as e:
         logger.error(
             "Subvolume %s (group=%s) could not be ensured on cluster %s (fs=%s)",

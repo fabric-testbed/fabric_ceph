@@ -32,11 +32,12 @@ class CephFsMountBundle:
         self.out_base = Path(out_base).resolve()
         self.mount_root_default = mount_root_default
 
-        # Filled by parse()
+        # Filled by parse() / _resolve_slugs()
         self.entity: Optional[str] = None          # e.g. client.alice_123
         self.user_only: Optional[str] = None       # e.g. alice_123
         self.secret: Optional[str] = None          # base64 secret
         self.fs_paths: List[Tuple[str, str]] = []  # list of (fsname, path)
+        self.fs_slugs: List[str] = []              # parallel to fs_paths
 
     # ---------- public API ----------
 
@@ -47,6 +48,7 @@ class CephFsMountBundle:
         """
         text = self._unescape_if_json(self.keyring_blob)
         self._parse_keyring(text)
+        self._resolve_slugs()
 
         cluster_dir = self.out_base / self.cluster
         cluster_dir.mkdir(parents=True, exist_ok=True)
@@ -67,9 +69,9 @@ class CephFsMountBundle:
                 {
                     "fsname": fs,
                     "path": p,
-                    "mount_point": f"{self.mount_root_default}/{self.cluster}/{self.user_only}/{self._slug_from_path(p)}",
+                    "mount_point": f"{self.mount_root_default}/{self.cluster}/{self.user_only}/{self.fs_slugs[i]}",
                 }
-                for fs, p in self.fs_paths
+                for i, (fs, p) in enumerate(self.fs_paths)
             ],
         }
 
@@ -170,8 +172,8 @@ class CephFsMountBundle:
             "",
         ]
 
-        for fsname, path in self.fs_paths:
-            slug = self._slug_from_path(path)
+        for i, (fsname, path) in enumerate(self.fs_paths):
+            slug = self.fs_slugs[i]
             mnt = f'$MNT_BASE/$CLUSTER/$USER/{slug}'
             lines += [
                 f'echo "Mounting fs={fsname} path={path} -> {mnt}"',
@@ -196,8 +198,46 @@ class CephFsMountBundle:
 
     # ---------- utils ----------
 
+    def _resolve_slugs(self) -> None:
+        """Compute a unique slug for every entry in ``self.fs_paths``.
+
+        When two paths produce the same slug, a numeric suffix ``_2``, ``_3``, …
+        is appended to disambiguate.
+        """
+        raw = [self._slug_from_path(p) for _, p in self.fs_paths]
+        counts: Dict[str, int] = {}
+        resolved: List[str] = []
+        for s in raw:
+            counts[s] = counts.get(s, 0) + 1
+            if counts[s] > 1:
+                resolved.append(f"{s}_{counts[s]}")
+            else:
+                resolved.append(s)
+        self.fs_slugs = resolved
+
     @staticmethod
     def _slug_from_path(p: str) -> str:
-        p = p.strip().lstrip("/")
-        slug = re.sub(r"[^A-Za-z0-9._-]+", "_", p)
+        """Convert a CephFS path into a human-friendly mount-point slug.
+
+        /volumes/_nogroup/<name>/<uuid>  →  <name>
+        /volumes/<group>/<name>/<uuid>   →  <group>_<name>
+        Other paths are sanitised (non-alphanum replaced with ``_``).
+        """
+        stripped = p.strip().lstrip("/")
+        if not stripped:
+            return "root"
+
+        parts = stripped.split("/")
+
+        # Match /volumes/<group>/<name>[/<uuid>]
+        if len(parts) >= 3 and parts[0] == "volumes":
+            group = parts[1]
+            name = parts[2]
+            if group.startswith("_"):
+                slug = name
+            else:
+                slug = f"{group}_{name}"
+            return re.sub(r"[^A-Za-z0-9._-]+", "_", slug) or "root"
+
+        slug = re.sub(r"[^A-Za-z0-9._-]+", "_", stripped)
         return slug or "root"

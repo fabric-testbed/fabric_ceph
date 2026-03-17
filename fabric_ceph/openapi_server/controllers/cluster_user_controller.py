@@ -59,14 +59,18 @@ def list_users(cluster):  # noqa: E501
     return rc.list_users(cluster)
 
 
-def list_project_members():  # noqa: E501
+def list_project_members(offset=0, limit=50):  # noqa: E501
     """List project members with bastion logins
 
      # noqa: E501
 
+    :param offset: Number of results to skip
+    :type offset: int
+    :param limit: Maximum number of results to return
+    :type limit: int
     :rtype: dict
     """
-    return rc.list_project_members()
+    return rc.list_project_members(offset=offset, limit=limit)
 
 
 def overwrite_user_caps(cluster, body):  # noqa: E501

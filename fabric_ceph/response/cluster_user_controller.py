@@ -1,4 +1,5 @@
 import json
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Dict, List, Any
 
 import connexion
@@ -276,14 +277,15 @@ def list_users(cluster):  # noqa: E501
         log.exception(f"Failed processing CephX list request: {e}")
         return cors_error_response(error=e)
 
-def list_project_members():  # noqa: E501
-    """List project members with bastion logins.
+def list_project_members(offset: int = 0, limit: int = 50):  # noqa: E501
+    """List project members with bastion logins (paginated).
 
     Returns active members of the configured service project who have a bastion_login.
+    Only fetches user details for the requested page to avoid gateway timeouts.
     """
     g = get_globals()
     log = g.log
-    log.debug("Processing list project members request")
+    log.debug(f"Processing list project members request (offset={offset}, limit={limit})")
 
     try:
         fabric_token, is_operator, _ = authorize()
@@ -314,29 +316,51 @@ def list_project_members():  # noqa: E501
                 if mtype:
                     people[uuid].add(mtype)
 
-        # Fetch user info for each unique person and collect bastion_login
+        # Sort UUIDs for stable pagination
+        sorted_uuids = sorted(people.keys())
+        total = len(sorted_uuids)
+
+        # Slice to the requested page
+        page_uuids = sorted_uuids[offset:offset + limit]
+
+        # Fetch user info in parallel only for the current page
+        def _fetch_member(uuid, mtypes):
+            user_info = core_api.get_user_info(uuid=uuid)
+            bastion_login = user_info.get("bastion_login")
+            if bastion_login:
+                return {
+                    "uuid": uuid,
+                    "bastion_login": bastion_login,
+                    "membership_types": sorted(mtypes),
+                }
+            return None
+
         members = []
-        for uuid, mtypes in people.items():
-            try:
-                user_info = core_api.get_user_info(uuid=uuid)
-                bastion_login = user_info.get("bastion_login")
-                if bastion_login:
-                    members.append({
-                        "uuid": uuid,
-                        "bastion_login": bastion_login,
-                        "membership_types": sorted(mtypes),
-                    })
-            except Exception as e:
-                log.warning(f"Failed to get user info for {uuid}: {e}")
-                continue
+        with ThreadPoolExecutor(max_workers=20) as executor:
+            futures = {
+                executor.submit(_fetch_member, uuid, people[uuid]): uuid
+                for uuid in page_uuids
+            }
+            for future in as_completed(futures):
+                uuid = futures[future]
+                try:
+                    result = future.result()
+                    if result:
+                        members.append(result)
+                except Exception as e:
+                    log.warning(f"Failed to get user info for {uuid}: {e}")
+                    continue
 
         # Sort by bastion_login
         members.sort(key=lambda m: m["bastion_login"].lower())
 
         body = json.dumps({
             "data": members,
+            "limit": limit,
+            "offset": offset,
             "size": len(members),
             "status": 200,
+            "total": total,
             "type": "project_members",
         })
         return cors_response(req=connexion.request, status_code=200, body=body)

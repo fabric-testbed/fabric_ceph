@@ -348,6 +348,7 @@ class CoreApi:
         sort_by: Optional[str] = None,
         order_by: Optional[str] = None,
         page_limit: int = 200,
+        extra: Optional[Dict[str, Any]] = None,
     ) -> List[dict]:
         """
         Fetch ALL pages of /projects (within the caller's normal scope) and
@@ -358,12 +359,14 @@ class CoreApi:
                 - True  => only active projects
                 - False => only inactive/expired projects
                 - None  => no client-side active filter (return all)
-            search, person_uuid, role, exact_match, include_memberships, tags:
+            search, person_uuid, exact_match:
                 Passed to the server per page (only filters supported by backend are applied server-side).
             sort_by, order_by:
                 Sorting applied server-side per page; we still iterate through all pages.
             page_limit:
                 Page size used for pagination (default 200).
+            extra:
+                Additional query parameters (e.g. {"role": "owner"}).
 
         Returns:
             List[dict]: aggregated projects from all pages, with optional client-side active filtering.
@@ -381,6 +384,7 @@ class CoreApi:
                 exact_match=exact_match,
                 sort_by=sort_by,
                 order_by=order_by,
+                extra=extra,
             )
             results = page.get("results") or []
             all_projects.extend(results)
@@ -570,6 +574,29 @@ class CoreApi:
             "PATCH",
             f"/projects/{project_uuid}/project-members",
             params={"operation": "add"},
+            json_body={"project_members": person_uuids},
+        )
+
+    def remove_members_from_project(
+        self, project_uuid: str, person_uuids: List[str]
+    ) -> None:
+        """
+        Remove one or more people from a project.
+
+        Uses ``PATCH /projects/{uuid}/project-members?operation=remove``.
+
+        :param project_uuid: UUID of the target project.
+        :param person_uuids: List of person UUIDs to remove.
+        :raises CoreApiError: On HTTP or validation errors.
+        """
+        if not project_uuid:
+            raise CoreApiError("project_uuid must be provided.")
+        if not person_uuids:
+            raise CoreApiError("person_uuids must be a non-empty list.")
+        self._request(
+            "PATCH",
+            f"/projects/{project_uuid}/project-members",
+            params={"operation": "remove"},
             json_body={"project_members": person_uuids},
         )
 

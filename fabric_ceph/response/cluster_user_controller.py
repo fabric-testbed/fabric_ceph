@@ -1,4 +1,5 @@
 import json
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Dict, List, Any
 
 import connexion
@@ -314,21 +315,33 @@ def list_project_members():  # noqa: E501
                 if mtype:
                     people[uuid].add(mtype)
 
-        # Fetch user info for each unique person and collect bastion_login
+        # Fetch user info in parallel to avoid N+1 timeout
+        def _fetch_member(uuid, mtypes):
+            user_info = core_api.get_user_info(uuid=uuid)
+            bastion_login = user_info.get("bastion_login")
+            if bastion_login:
+                return {
+                    "uuid": uuid,
+                    "bastion_login": bastion_login,
+                    "membership_types": sorted(mtypes),
+                }
+            return None
+
         members = []
-        for uuid, mtypes in people.items():
-            try:
-                user_info = core_api.get_user_info(uuid=uuid)
-                bastion_login = user_info.get("bastion_login")
-                if bastion_login:
-                    members.append({
-                        "uuid": uuid,
-                        "bastion_login": bastion_login,
-                        "membership_types": sorted(mtypes),
-                    })
-            except Exception as e:
-                log.warning(f"Failed to get user info for {uuid}: {e}")
-                continue
+        with ThreadPoolExecutor(max_workers=20) as executor:
+            futures = {
+                executor.submit(_fetch_member, uuid, mtypes): uuid
+                for uuid, mtypes in people.items()
+            }
+            for future in as_completed(futures):
+                uuid = futures[future]
+                try:
+                    result = future.result()
+                    if result:
+                        members.append(result)
+                except Exception as e:
+                    log.warning(f"Failed to get user info for {uuid}: {e}")
+                    continue
 
         # Sort by bastion_login
         members.sort(key=lambda m: m["bastion_login"].lower())

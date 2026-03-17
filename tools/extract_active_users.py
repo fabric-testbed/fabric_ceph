@@ -5,12 +5,17 @@
 #
 # Author: Komal Thareja (kthare10@renci.org)
 
-"""Extract all active FABRIC users to a CSV file.
+"""Extract active FABRIC users who belong to at least one active project
+(other than the FABRIC Ceph storage service project) to a CSV file.
 
 The /people list endpoint only returns (uuid, name, email), so this script
 fetches the enriched detail record for each user from the core-api-metrics
 endpoint to obtain ``bastion_login``, ``active`` status, and ``last_updated``
 timestamp.  Users who have not been updated in over a year are excluded.
+Users whose only active project is the Ceph storage project are excluded.
+
+A user qualifies if they are a member, owner, or creator of at least one
+active project other than the Ceph storage project.
 """
 
 import argparse
@@ -20,10 +25,12 @@ import sys
 
 from core_api import CoreApi, CoreApiError, _parse_possible_timestamp
 
+STORAGE_PROJECT_UUID = "6b8dd6eb-4b2b-4656-b3ee-ce61f91a12b4"
+
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Extract active FABRIC users to CSV"
+        description="Extract active FABRIC users (with non-storage project membership) to CSV"
     )
     parser.add_argument(
         "--token-file", required=True,
@@ -40,6 +47,10 @@ def main():
     parser.add_argument(
         "--inactive-days", type=int, default=365,
         help="Exclude users not updated in this many days (default: 365)"
+    )
+    parser.add_argument(
+        "--storage-project-uuid", default=STORAGE_PROJECT_UUID,
+        help=f"UUID of the Ceph storage project to exclude (default: {STORAGE_PROJECT_UUID})"
     )
     args = parser.parse_args()
 
@@ -66,6 +77,7 @@ def main():
     active_users = []
     skipped_inactive = 0
     skipped_stale = 0
+    skipped_no_project = 0
 
     for i, person in enumerate(people, 1):
         uuid = person.get("uuid")
@@ -98,6 +110,43 @@ def main():
                 print(f"  Processed {i}/{total}...")
             continue
 
+        # Must be a member, owner, or creator of at least one active project
+        # other than the storage project
+        try:
+            seen_uuids = set()
+            other_projects = []
+            for role in ("member", "creator", "owner"):
+                try:
+                    projects = core.collect_projects(
+                        person_uuid=uuid, active=True,
+                        extra={"role": role},
+                    )
+                except CoreApiError:
+                    # Some API versions may not support role filter; fall back
+                    if role == "member":
+                        projects = core.collect_projects(
+                            person_uuid=uuid, active=True,
+                        )
+                    else:
+                        continue
+                for p in projects:
+                    puuid = p.get("uuid")
+                    if puuid and puuid != args.storage_project_uuid and puuid not in seen_uuids:
+                        seen_uuids.add(puuid)
+                        other_projects.append(p)
+            if not other_projects:
+                skipped_no_project += 1
+                name = detail.get("name") or ""
+                email = detail.get("email") or ""
+                print(f"  Skipping {name} ({email}) — no active project besides Ceph storage")
+                if i % 100 == 0 or i == total:
+                    print(f"  Processed {i}/{total}...")
+                continue
+        except CoreApiError as e:
+            # If we can't check projects, include the user to be safe
+            print(f"  Warning: could not check projects for {uuid}: {e}",
+                  file=sys.stderr)
+
         active_users.append(detail)
 
         if i % 100 == 0 or i == total:
@@ -110,7 +159,8 @@ def main():
             writer.writerow(user)
 
     print(f"\nWrote {len(active_users)} active users to {args.output}")
-    print(f"Skipped: {skipped_inactive} inactive, {skipped_stale} not updated in {args.inactive_days}+ days")
+    print(f"Skipped: {skipped_inactive} inactive, {skipped_stale} stale (>{args.inactive_days} days), "
+          f"{skipped_no_project} no active project besides Ceph storage")
 
 
 if __name__ == "__main__":

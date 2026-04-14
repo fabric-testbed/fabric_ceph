@@ -79,11 +79,9 @@ def list_cluster_info():
         items: List[Dict[str, Any]] = []
 
         # Stable order across clusters
-        clients: Dict[str, DashClient] = {name: DashClient.for_cluster(name, entry)
-                                          for name, entry in cfg.cluster.items()}
-
-        for name, dc in clients.items():
+        for name, entry in cfg.cluster.items():
             try:
+                dc = DashClient.for_cluster(name, entry)
                 fsid = dc.get_cluster_fsid()
                 log.debug(f"Found fsid {fsid}")
                 mon_json = dc.get_monitor_map()
